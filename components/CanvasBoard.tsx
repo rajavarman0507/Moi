@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
-import { getRtdb } from "@/lib/firebase";
-import { ref, onValue, set, remove } from "firebase/database";
+import { db } from "@/lib/firebase";
+import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { RotateCcw, Palette } from "lucide-react";
 
 interface StrokePoint {
-  x: number;
-  y: number;
+  x: number; // Normalized 0..1
+  y: number; // Normalized 0..1
   color: string;
   width: number;
   isNewStroke?: boolean;
@@ -25,31 +25,14 @@ export default function CanvasBoard({ coupleId, isDrawer }: CanvasBoardProps) {
   const [color, setColor] = useState<string>("#FB7185");
   const [lineWidth, setLineWidth] = useState<number>(5);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
-  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
-  const strokesRef = ref(getRtdb(), `presence/${coupleId}/sketchStrokes`);
+  const localPointsRef = useRef<StrokePoint[]>([]);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Draw points onto canvas
-  const drawLineSegment = (
-    ctx: CanvasRenderingContext2D,
-    fromX: number,
-    fromY: number,
-    toX: number,
-    toY: number,
-    strokeColor: string,
-    width: number
-  ) => {
-    ctx.beginPath();
-    ctx.moveTo(fromX, fromY);
-    ctx.lineTo(toX, toY);
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = width;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.stroke();
-  };
+  const strokesDocRef = doc(db, "couples", coupleId, "sketchStrokes", "current");
 
-  const renderAllStrokes = (strokes: StrokePoint[]) => {
+  // Render points on canvas
+  const renderAllPoints = (points: StrokePoint[]) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -58,7 +41,7 @@ export default function CanvasBoard({ coupleId, isDrawer }: CanvasBoardProps) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     let prev: StrokePoint | null = null;
-    strokes.forEach((pt) => {
+    points.forEach((pt) => {
       const realX = pt.x * canvas.width;
       const realY = pt.y * canvas.height;
 
@@ -70,128 +53,134 @@ export default function CanvasBoard({ coupleId, isDrawer }: CanvasBoardProps) {
       } else {
         const prevX = prev.x * canvas.width;
         const prevY = prev.y * canvas.height;
-        drawLineSegment(ctx, prevX, prevY, realX, realY, pt.color, pt.width);
+        ctx.beginPath();
+        ctx.moveTo(prevX, prevY);
+        ctx.lineTo(realX, realY);
+        ctx.strokeStyle = pt.color;
+        ctx.lineWidth = pt.width;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
       }
       prev = pt;
     });
   };
 
-  // Sync strokes from RTDB in real time
+  // Subscribe to Firestore stroke document in real-time for both partners
   useEffect(() => {
-    const unsubscribe = onValue(strokesRef, (snapshot) => {
-      const val = snapshot.val();
-      if (!val) {
+    if (!coupleId) return;
+
+    const unsubscribe = onSnapshot(strokesDocRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const points: StrokePoint[] = data.points || [];
+        localPointsRef.current = points;
+        renderAllPoints(points);
+      } else {
+        localPointsRef.current = [];
         const canvas = canvasRef.current;
         if (canvas) {
           const ctx = canvas.getContext("2d");
           if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
-        return;
       }
-      const strokeList: StrokePoint[] = Object.values(val);
-      renderAllStrokes(strokeList);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
   }, [coupleId]);
 
-  // Coordinates helper
-  const getCanvasCoordinates = (
-    clientX: number,
-    clientY: number
-  ): { normX: number; normY: number; realX: number; realY: number } | null => {
+  // Coordinate normalizer (0..1)
+  const getNormCoords = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const normX = (clientX - rect.left) / rect.width;
-    const normY = (clientY - rect.top) / rect.height;
-    const realX = normX * canvas.width;
-    const realY = normY * canvas.height;
-    return { normX, normY, realX, realY };
+    const x = (clientX - rect.left) / rect.width;
+    const y = (clientY - rect.top) / rect.height;
+    return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
   };
 
-  // Mouse & Touch Handlers
   const startDrawing = (clientX: number, clientY: number) => {
-    if (!isDrawer) return;
+    if (!isDrawer) return; // Only drawer can draw!
     setIsDrawing(true);
 
-    const coords = getCanvasCoordinates(clientX, clientY);
+    const coords = getNormCoords(clientX, clientY);
     if (!coords) return;
 
-    lastPointRef.current = { x: coords.realX, y: coords.realY };
+    const newPt: StrokePoint = {
+      x: coords.x,
+      y: coords.y,
+      color,
+      width: lineWidth,
+      isNewStroke: true,
+    };
 
-    // Draw locally first
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.beginPath();
-        ctx.arc(coords.realX, coords.realY, lineWidth / 2, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-      }
-    }
-
-    // Push to RTDB
-    pushPointToRtdb(coords.normX, coords.normY, true);
+    const updated = [...localPointsRef.current, newPt];
+    localPointsRef.current = updated;
+    renderAllPoints(updated);
+    savePointsToFirestore(updated);
   };
 
   const drawMove = (clientX: number, clientY: number) => {
-    if (!isDrawer || !isDrawing) return;
+    if (!isDrawer || !isDrawing) return; // Only drawer can draw!
 
-    const coords = getCanvasCoordinates(clientX, clientY);
+    const coords = getNormCoords(clientX, clientY);
     if (!coords) return;
 
-    // Draw line locally
-    if (lastPointRef.current && canvasRef.current) {
-      const ctx = canvasRef.current.getContext("2d");
-      if (ctx) {
-        drawLineSegment(
-          ctx,
-          lastPointRef.current.x,
-          lastPointRef.current.y,
-          coords.realX,
-          coords.realY,
-          color,
-          lineWidth
-        );
-      }
-    }
+    const newPt: StrokePoint = {
+      x: coords.x,
+      y: coords.y,
+      color,
+      width: lineWidth,
+      isNewStroke: false,
+    };
 
-    lastPointRef.current = { x: coords.realX, y: coords.realY };
+    const updated = [...localPointsRef.current, newPt];
+    localPointsRef.current = updated;
+    renderAllPoints(updated);
 
-    // Push to RTDB
-    pushPointToRtdb(coords.normX, coords.normY, false);
+    savePointsThrottled(updated);
   };
 
   const stopDrawing = () => {
+    if (!isDrawer || !isDrawing) return;
     setIsDrawing(false);
-    lastPointRef.current = null;
+    savePointsToFirestore(localPointsRef.current);
   };
 
-  const pushPointToRtdb = (normX: number, normY: number, isNewStroke: boolean) => {
+  const savePointsThrottled = (points: StrokePoint[]) => {
+    if (saveTimeoutRef.current) return;
+    saveTimeoutRef.current = setTimeout(() => {
+      savePointsToFirestore(points);
+      saveTimeoutRef.current = null;
+    }, 60);
+  };
+
+  const savePointsToFirestore = async (points: StrokePoint[]) => {
     try {
-      const rtdb = getRtdb();
-      const pointRef = ref(rtdb, `presence/${coupleId}/sketchStrokes/${Date.now()}_${Math.random()}`);
-      set(pointRef, {
-        x: normX,
-        y: normY,
-        color,
-        width: lineWidth,
-        isNewStroke,
+      await setDoc(strokesDocRef, {
+        points,
+        updatedAt: serverTimestamp(),
       });
     } catch (err) {
-      console.error("RTDB stroke push error:", err);
+      console.error("Error saving strokes to Firestore:", err);
     }
   };
 
-  const handleClearCanvas = () => {
-    if (!isDrawer) return;
-    try {
-      remove(strokesRef);
-    } catch (err) {
-      console.error("Clear canvas error:", err);
+  const handleClearCanvas = async () => {
+    if (!isDrawer) return; // Only drawer can clear!
+    localPointsRef.current = [];
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
+    await setDoc(strokesDocRef, {
+      points: [],
+      updatedAt: serverTimestamp(),
+    });
   };
 
   return (
@@ -212,7 +201,7 @@ export default function CanvasBoard({ coupleId, isDrawer }: CanvasBoardProps) {
             if (e.touches.length > 0) drawMove(e.touches[0].clientX, e.touches[0].clientY);
           }}
           onTouchEnd={stopDrawing}
-          className={`w-full h-full ${isDrawer ? "cursor-crosshair" : "cursor-default"}`}
+          className={`w-full h-full ${isDrawer ? "cursor-crosshair" : "cursor-default pointer-events-none"}`}
         />
       </div>
 

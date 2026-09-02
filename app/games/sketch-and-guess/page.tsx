@@ -2,9 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { db, getRtdb } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
-import { ref, remove } from "firebase/database";
 import sketchWords from "@/data/sketchWords.json";
 import { SketchAndGuessState } from "@/lib/gameSchemas";
 import CanvasBoard from "@/components/CanvasBoard";
@@ -82,9 +81,9 @@ export default function SketchAndGuessPage() {
   const handleNextRound = async () => {
     if (!couple?.id || !gameState || !user?.uid || !partnerUid) return;
 
-    // Clear RTDB strokes
-    const strokesRef = ref(getRtdb(), `presence/${couple.id}/sketchStrokes`);
-    remove(strokesRef);
+    // Clear Firestore strokes document
+    const strokesDocRef = doc(db, "couples", couple.id, "sketchStrokes", "current");
+    await setDoc(strokesDocRef, { points: [], updatedAt: serverTimestamp() });
 
     const nextIndex = (gameState.wordIndex + 1) % sketchWords.length;
     const nextWord = sketchWords[nextIndex];
