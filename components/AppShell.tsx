@@ -14,6 +14,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import GlobalPresence from "@/components/GlobalPresence";
 
 interface NavItem {
   name: string;
@@ -49,6 +50,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row relative z-10">
+      {/* Global Presence Tracker Across All Pages */}
+      <GlobalPresence />
+
       {/* Desktop Left Sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-[#16060E]/85 backdrop-blur-xl border-r border-rose-900/30 p-6 z-20 justify-between shadow-2xl">
         <div className="space-y-8">
