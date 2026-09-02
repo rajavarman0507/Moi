@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function: Check if user owns the account document
+    function isUser(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper function: Check if request user is one of the two partners in a couple document
+    function isPartnerInCouple(coupleData) {
+      return isAuthenticated() && (request.auth.uid in coupleData.userIds);
+    }
+
+    // Helper function: Fetch couple document to verify partnership for subcollections
+    function getCoupleData(coupleId) {
+      return get(/databases/$(database)/documents/couples/$(coupleId)).data;
+    }
+
+    // =========================================================================
+    // USERS COLLECTION
+    // Stores user profile info (name, email, coupleId reference)
+    // =========================================================================
+    match /users/{userId} {
+      // Any authenticated user can read user profiles (e.g. to display partner name)
+      allow read: if isAuthenticated();
+      // Only the account holder can create or update their own profile document
+      allow write: if isUser(userId);
+    }
+
+    // =========================================================================
+    // INVITES COLLECTION
+    // Temporary 6-character codes used during the pairing flow
+    // =========================================================================
+    match /invites/{code} {
+      // Authenticated users can read invite codes to complete account pairing
+      allow read: if isAuthenticated();
+      // Authenticated users can create or consume invite codes
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // =========================================================================
+    // COUPLES COLLECTION & PRIVATE HUB SUBCOLLECTIONS
+    // Strict isolation: ONLY the 2 paired user IDs listed in userIds array can access!
+    // =========================================================================
+    match /couples/{coupleId} {
+      // Read: Allowed ONLY if request.auth.uid is listed in couple.userIds
+      allow read: if isAuthenticated() && isPartnerInCouple(resource.data);
+
+      // Create: Allowed ONLY if request.auth.uid is listed in new couple.userIds (and exactly 2 user IDs present)
+      allow create: if isAuthenticated() 
+                    && request.resource.data.userIds.size() == 2 
+                    && isPartnerInCouple(request.resource.data);
+
+      // Update / Delete: Allowed ONLY if request.auth.uid is listed in existing couple.userIds
+      allow update, delete: if isAuthenticated() && isPartnerInCouple(resource.data);
+
+      // =======================================================================
+      // All nested collections under couples/{coupleId} (Games, Cards, Journal, Moods, etc.)
+      // Inherit strict access control — only the 2 paired partners can access.
+      // =======================================================================
+      match /{allSubcollections=**} {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+    }
+
+  }
+}

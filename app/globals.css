@@ -1,0 +1,57 @@
+@import "../styles/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: var(--color-cream-50);
+  color: var(--color-plum-900);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Glassmorphism & Soft Card Utility Classes */
+.moi-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(247, 228, 232, 0.6);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-soft);
+  transition: all 0.2s ease-in-out;
+}
+
+.moi-card:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+.moi-button-primary {
+  background-color: var(--color-plum-800);
+  color: var(--color-cream-50);
+  border-radius: 0.875rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.moi-button-primary:hover {
+  background-color: var(--color-plum-700);
+}
+
+.moi-button-primary:active {
+  transform: scale(0.98);
+}
+
+.moi-button-secondary {
+  background-color: var(--color-rose-100);
+  color: var(--color-plum-800);
+  border-radius: 0.875rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.moi-button-secondary:hover {
+  background-color: var(--color-rose-200);
+}
