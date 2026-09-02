@@ -1,0 +1,102 @@
+[
+  {
+    "id": 1,
+    "question": "What is your ideal Saturday afternoon together?",
+    "options": [
+      "Exploring a new cafe or outdoor market in town ☕",
+      "Binging movies under a warm blanket at home 🍿",
+      "Going on an active hike or sports adventure 🥾",
+      "Hosting a dinner party for close friends 🍷"
+    ]
+  },
+  {
+    "id": 2,
+    "question": "How do you prefer to handle a stressful day?",
+    "options": [
+      "Venting about everything to my partner immediately 🗣️",
+      "Having 30 minutes of quiet solo downtime first 🧘",
+      "Doing a fun distraction like cooking or playing games 🎮",
+      "Going for a long walk or workout to burn off energy 🏃"
+    ]
+  },
+  {
+    "id": 3,
+    "question": "What is your primary Love Language for feeling cherished?",
+    "options": [
+      "Words of Affirmation & Sweet Texts 📝",
+      "Quality Time & Undivided Attention ⌛",
+      "Physical Touch & Warm Hugs 🫂",
+      "Acts of Service & Helping Out 🧼"
+    ]
+  },
+  {
+    "id": 4,
+    "question": "What is your dream vacation style for two?",
+    "options": [
+      "Relaxing on a sunny beach resort with zero schedule 🏖️",
+      "Cultural city tour visiting museums and historic sites 🏛️",
+      "Action-packed backpacking & wilderness exploration 🎒",
+      "Cozy luxury cabin retreat with spa massages 🏔️"
+    ]
+  },
+  {
+    "id": 5,
+    "question": "When making big joint purchases, how do you decide?",
+    "options": [
+      "Research extensively and compare prices for weeks 📊",
+      "Go with gut feeling if it brings joy and quality ✨",
+      "Set a strict budget and stick to it rigidly 💰",
+      "Discuss together and split the cost evenly 🤝"
+    ]
+  },
+  {
+    "id": 6,
+    "question": "What is your favorite way to celebrate a major personal achievement?",
+    "options": [
+      "A romantic fine dining dinner for just the two of us 🕯️",
+      "Throwing a celebratory party with all our loved ones 🎉",
+      "Booking a weekend getaway trip to somewhere new ✈️",
+      "Cozying up at home with takeout and your favorite treat 🍕"
+    ]
+  },
+  {
+    "id": 7,
+    "question": "How do you prefer to resolve small disagreements?",
+    "options": [
+      "Talk it through immediately until it's 100% resolved 💬",
+      "Take a short cooling-off period, then discuss calmly 🧊",
+      "Use humor and a warm hug to break the tension 😊",
+      "Write down thoughts so we communicate clearly ✍️"
+    ]
+  },
+  {
+    "id": 8,
+    "question": "What kind of home environment makes you feel happiest?",
+    "options": [
+      "Minimalist, tidy, and organized with clean spaces 🧹",
+      "Warm, lived-in, cozy with photos and keepsakes 🖼️",
+      "Modern, sleek, with high-tech devices and gadgets 📱",
+      "Bright, natural, filled with plants and sunlight 🌿"
+    ]
+  },
+  {
+    "id": 9,
+    "question": "What is your perspective on spontaneous plans?",
+    "options": [
+      "Love them! The best memories come from unplanned adventures 🚀",
+      "Prefer a balance — spontaneous weekend, planned week ⚖️",
+      "Prefer knowing plans ahead of time to prepare mentally 🗓️",
+      "Depends entirely on how tired or energized I feel ⚡"
+    ]
+  },
+  {
+    "id": 10,
+    "question": "What makes a date night feel truly special to you?",
+    "options": [
+      "Dressing up fancy and trying a new upscale spot 👗",
+      "Deep, meaningful conversation with zero phone screens 💬",
+      "Doing a fun interactive activity like arcade or bowling 🎳",
+      "Cuddling up at home with our favorite food & music 🎶"
+    ]
+  }
+]
