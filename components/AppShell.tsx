@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { usePartnerPresence } from "@/hooks/usePartnerPresence";
 import {
   Home,
   Gamepad2,
@@ -35,6 +36,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { userProfile, logout } = useAuth();
+  const { online: partnerOnline, currentPath: partnerPath, partnerName } = usePartnerPresence();
 
   // Hide AppShell navigation on Auth & Pairing pages
   const isAuthPage = pathname === "/login" || pathname === "/signup" || pathname === "/pair";
@@ -46,6 +48,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const handleLogout = async () => {
     await logout();
     router.push("/login");
+  };
+
+  const isPartnerOnItem = (itemHref: string) => {
+    if (!partnerOnline) return false;
+    if (itemHref === "/") return partnerPath === "/";
+    return partnerPath.startsWith(itemHref);
   };
 
   return (
@@ -75,18 +83,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
+              const partnerHere = isPartnerOnItem(item.href);
+
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
+                  className={`flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
                     isActive
                       ? "bg-gradient-to-r from-rose-900/60 to-wine-800/80 text-white border border-rose-500/30 shadow-glow"
                       : "text-rose-200/70 hover:bg-rose-950/40 hover:text-white"
                   }`}
                 >
-                  <Icon className={`w-5 h-5 ${isActive ? "text-rose-400" : "text-rose-300/60"}`} />
-                  <span>{item.name}</span>
+                  <div className="flex items-center space-x-3">
+                    <Icon className={`w-5 h-5 ${isActive ? "text-rose-400" : "text-rose-300/60"}`} />
+                    <span>{item.name}</span>
+                  </div>
+
+                  {/* Partner Blinking Green Heart Badge */}
+                  {partnerHere && (
+                    <span
+                      className="text-xs animate-bounce"
+                      title={`${partnerName} is viewing this page`}
+                    >
+                      💚
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -150,16 +172,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
+          const partnerHere = isPartnerOnItem(item.href);
+
           return (
             <Link
               key={item.name}
               href={item.href}
-              className={`flex flex-col items-center py-1 px-3 rounded-xl transition-all ${
+              className={`flex flex-col items-center py-1 px-3 rounded-xl transition-all relative ${
                 isActive ? "text-rose-400 font-semibold" : "text-rose-300/60"
               }`}
             >
               <Icon className="w-5 h-5" />
               <span className="text-[10px] mt-1">{item.name}</span>
+              {partnerHere && (
+                <span className="absolute -top-1 right-1 text-[10px] animate-bounce">
+                  💚
+                </span>
+              )}
             </Link>
           );
         })}

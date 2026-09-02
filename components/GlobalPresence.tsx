@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { db, getRtdb } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -8,6 +9,7 @@ import { ref, onValue, push, onDisconnect, set } from "firebase/database";
 
 export default function GlobalPresence() {
   const { user, couple } = useAuth();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!user || !couple?.id) return;
@@ -17,34 +19,33 @@ export default function GlobalPresence() {
 
     const firestorePresenceRef = doc(db, "couples", coupleId, "presence", userId);
 
-    // Mark online in Firestore
-    const setOnlineInFirestore = async (isOnline: boolean) => {
+    const updateLocationInFirestore = async (isOnline: boolean) => {
       try {
         await setDoc(firestorePresenceRef, {
           online: isOnline,
           userId,
+          currentPath: pathname,
           updatedAt: serverTimestamp(),
-        });
+        }, { merge: true });
       } catch (err) {
-        console.error("Firestore presence error:", err);
+        console.error("Firestore presence location error:", err);
       }
     };
 
-    // Mark online immediately
-    setOnlineInFirestore(true);
+    // Update location immediately when pathname changes
+    updateLocationInFirestore(true);
 
-    // Heartbeat every 10 seconds to keep presence fresh
+    // Heartbeat every 10 seconds
     const interval = setInterval(() => {
-      setOnlineInFirestore(true);
+      updateLocationInFirestore(true);
     }, 10000);
 
-    // Tab close / unload handlers
     const handleUnload = () => {
-      setOnlineInFirestore(false);
+      updateLocationInFirestore(false);
     };
     window.addEventListener("beforeunload", handleUnload);
 
-    // Realtime Database presence backup
+    // RTDB presence backup
     let unsubConnected: (() => void) | null = null;
     try {
       const rtdb = getRtdb();
@@ -66,9 +67,9 @@ export default function GlobalPresence() {
       clearInterval(interval);
       window.removeEventListener("beforeunload", handleUnload);
       if (unsubConnected) unsubConnected();
-      setOnlineInFirestore(false);
+      updateLocationInFirestore(false);
     };
-  }, [user, couple]);
+  }, [user, couple, pathname]);
 
   return null;
 }
