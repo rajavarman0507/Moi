@@ -167,13 +167,13 @@ export default function SketchAndGuessPage() {
           </div>
 
           {/* Guesses Panel */}
-          <div className="moi-card p-6 flex flex-col justify-between h-[420px] bg-wine-950/70 border border-rose-500/30">
+          <div className="moi-card p-6 flex flex-col justify-between h-[420px] bg-wine-950/80 border border-rose-500/30">
             <div className="space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-rose-300 border-b border-rose-900/40 pb-2">
                 Live Guesses
               </h3>
 
-              <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
                 {gameState?.guesses.length === 0 ? (
                   <p className="text-xs text-rose-300/40 italic">No guesses submitted yet...</p>
                 ) : (
@@ -182,12 +182,12 @@ export default function SketchAndGuessPage() {
                       key={idx}
                       className={`p-2.5 rounded-xl text-xs flex items-center justify-between ${
                         g.isCorrect
-                          ? "bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold"
-                          : "bg-wine-900/40 border border-rose-500/10 text-rose-100"
+                          ? "bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 font-bold"
+                          : "bg-[#2A0A19] border border-rose-500/20 text-rose-100 font-medium"
                       }`}
                     >
                       <span>{g.text}</span>
-                      <span className="text-[10px] opacity-60">{g.time}</span>
+                      <span className="text-[10px] text-rose-300/60 ml-2">{g.time}</span>
                     </div>
                   ))
                 )}
@@ -201,7 +201,7 @@ export default function SketchAndGuessPage() {
                 <p className="text-xs font-extrabold text-emerald-200">Correct! The word was "{gameState.secretWord}"!</p>
                 <button
                   onClick={handleNextRound}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold w-full"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold w-full transition-colors"
                 >
                   Swap Roles for Next Round! 🎨
                 </button>
@@ -214,17 +214,18 @@ export default function SketchAndGuessPage() {
                   value={guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
                   placeholder="Type your guess here..."
-                  className="w-full pl-4 pr-10 py-3 rounded-2xl bg-wine-950/80 border border-rose-500/30 text-white text-xs placeholder-rose-300/40 focus:border-rose-400 focus:outline-none"
+                  className="w-full pl-4 pr-11 py-3.5 rounded-2xl bg-[#1B0710] border border-rose-500/40 text-white font-semibold text-xs placeholder:text-rose-300/50 focus:border-rose-400 focus:outline-none focus:ring-1 focus:ring-rose-400 shadow-inner"
+                  style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
                 />
                 <button
                   type="submit"
-                  className="absolute right-2 top-2 p-1.5 rounded-xl bg-rose-600 text-white hover:bg-rose-500 transition-colors"
+                  className="absolute right-2 top-2 p-2 rounded-xl bg-gradient-to-r from-rose-600 to-wine-700 text-white hover:from-rose-500 hover:to-wine-600 transition-all shadow-glow"
                 >
                   <Send className="w-3.5 h-3.5" />
                 </button>
               </form>
             ) : (
-              <p className="text-xs text-rose-300/60 text-center italic mt-2">
+              <p className="text-xs text-rose-300/70 text-center italic mt-2 font-medium">
                 Draw clearly on the canvas so {partnerName} can guess!
               </p>
             )}

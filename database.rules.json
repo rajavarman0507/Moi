@@ -3,6 +3,9 @@
     "presence": {
       "$coupleId": {
         ".read": "auth != null && (root.child('couples').child($coupleId).child('userIds').child('0').val() == auth.uid || root.child('couples').child($coupleId).child('userIds').child('1').val() == auth.uid)",
+        "sketchStrokes": {
+          ".write": "auth != null && (root.child('couples').child($coupleId).child('userIds').child('0').val() == auth.uid || root.child('couples').child($coupleId).child('userIds').child('1').val() == auth.uid)"
+        },
         "$userId": {
           ".write": "auth != null && auth.uid == $userId"
         }
