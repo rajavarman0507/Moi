@@ -17,7 +17,7 @@ import { Heart, Copy, Check, Calendar, Key, Sparkles, ArrowRight } from "lucide-
 
 export default function PairPage() {
   const router = useRouter();
-  const { user, userProfile, couple, loading } = useAuth();
+  const { user, couple, loading } = useAuth();
 
   const [activeTab, setActiveTab] = useState<"generate" | "join">("generate");
   const [generatedCode, setGeneratedCode] = useState<string>("");
@@ -32,14 +32,12 @@ export default function PairPage() {
   const [error, setError] = useState<string>("");
   const [successMsg, setSuccessMsg] = useState<string>("");
 
-  // Redirect if already paired
   useEffect(() => {
     if (!loading && couple) {
       router.push("/");
     }
   }, [couple, loading, router]);
 
-  // Auto-generate invite code on tab selection if not created yet
   useEffect(() => {
     if (user && activeTab === "generate" && !generatedCode && !isGenerating) {
       generateInviteCode();
@@ -47,7 +45,7 @@ export default function PairPage() {
   }, [user, activeTab]);
 
   const generateRandomCode = (): string => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // clear readable alphanumeric
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let code = "";
     for (let i = 0; i < 6; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -117,11 +115,9 @@ export default function PairPage() {
         return;
       }
 
-      // Generate couple document ID
       const newCoupleRef = doc(collection(db, "couples"));
       const coupleId = newCoupleRef.id;
 
-      // 1. Create Couple Document
       await setDoc(newCoupleRef, {
         id: coupleId,
         userIds: [inviteData.creatorUid, user.uid],
@@ -129,17 +125,14 @@ export default function PairPage() {
         createdAt: serverTimestamp(),
       });
 
-      // 2. Update Creator User Doc
       await updateDoc(doc(db, "users", inviteData.creatorUid), {
         coupleId: coupleId,
       });
 
-      // 3. Update Current User Doc
       await updateDoc(doc(db, "users", user.uid), {
         coupleId: coupleId,
       });
 
-      // 4. Delete Invite Code
       await deleteDoc(inviteRef);
 
       setSuccessMsg("Successfully paired! Directing to your home...");
@@ -156,37 +149,39 @@ export default function PairPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-cream-50 flex items-center justify-center p-6 text-plum-800">
+      <div className="min-h-screen flex items-center justify-center p-6 text-rose-300 relative z-10">
         <p className="font-medium animate-pulse">Loading pairing space...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-cream-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-lg bg-white/90 backdrop-blur-md p-8 md:p-10 rounded-3xl border border-rose-100 shadow-soft space-y-8">
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-plum-800 to-plum-600 flex items-center justify-center text-cream-50 font-bold text-2xl mx-auto shadow-md">
-            M
+    <div className="min-h-screen flex items-center justify-center p-6 relative z-10">
+      <div className="w-full max-w-lg moi-card p-8 md:p-10 space-y-8 relative overflow-hidden">
+        <div className="text-center space-y-3">
+          <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-rose-600 via-wine-600 to-rose-400 flex items-center justify-center text-white mx-auto shadow-glow">
+            <Heart className="w-7 h-7 fill-white text-white animate-pulse" />
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-plum-900">
-            Connect With Your Partner
-          </h1>
-          <p className="text-sm text-plum-500">
-            Moi is built strictly for two. Pair your accounts to begin.
-          </p>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white flex items-center justify-center gap-2">
+              <span>Connect With Your Partner</span>
+              <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
+            </h1>
+            <p className="text-sm text-rose-200/70 mt-1">
+              Moi is built strictly for two. Pair your accounts to begin.
+            </p>
+          </div>
         </div>
 
         {/* Tab Toggle */}
-        <div className="flex bg-rose-50 p-1.5 rounded-2xl border border-rose-100">
+        <div className="flex bg-wine-950/80 p-1.5 rounded-2xl border border-rose-500/20">
           <button
             type="button"
             onClick={() => setActiveTab("generate")}
             className={`flex-1 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all ${
               activeTab === "generate"
-                ? "bg-white text-plum-900 shadow-sm"
-                : "text-plum-600 hover:text-plum-900"
+                ? "bg-gradient-to-r from-rose-600 to-wine-700 text-white shadow-glow"
+                : "text-rose-300/70 hover:text-white"
             }`}
           >
             My Invite Code
@@ -196,8 +191,8 @@ export default function PairPage() {
             onClick={() => setActiveTab("join")}
             className={`flex-1 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all ${
               activeTab === "join"
-                ? "bg-white text-plum-900 shadow-sm"
-                : "text-plum-600 hover:text-plum-900"
+                ? "bg-gradient-to-r from-rose-600 to-wine-700 text-white shadow-glow"
+                : "text-rose-300/70 hover:text-white"
             }`}
           >
             Enter Partner Code
@@ -205,13 +200,13 @@ export default function PairPage() {
         </div>
 
         {error && (
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-400 font-medium">
+          <div className="p-4 rounded-2xl bg-rose-950/80 border border-rose-500/40 text-xs text-rose-300 font-medium">
             {error}
           </div>
         )}
 
         {successMsg && (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-600 font-medium">
+          <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-500/40 text-xs text-emerald-300 font-medium">
             {successMsg}
           </div>
         )}
@@ -219,15 +214,15 @@ export default function PairPage() {
         {/* TAB 1: Display Invite Code */}
         {activeTab === "generate" && (
           <div className="space-y-6 text-center">
-            <p className="text-xs text-plum-600">
+            <p className="text-xs text-rose-200/70">
               Share this code with your partner. Once they enter it, your accounts will instantly link!
             </p>
 
-            <div className="bg-cream-100 border border-rose-100 p-6 rounded-3xl space-y-3 relative">
-              <span className="text-xs uppercase font-semibold text-plum-500 tracking-wider block">
+            <div className="bg-wine-950/60 border border-rose-500/30 p-6 rounded-3xl space-y-4 relative shadow-glow">
+              <span className="text-xs uppercase font-semibold text-rose-400 tracking-wider block">
                 Your 6-Character Code
               </span>
-              <div className="text-4xl md:text-5xl font-mono font-bold text-plum-900 tracking-widest">
+              <div className="text-4xl md:text-5xl font-mono font-extrabold text-amber-200 tracking-widest drop-shadow-[0_0_12px_rgba(254,240,138,0.5)]">
                 {isGenerating ? "..." : generatedCode || "------"}
               </div>
 
@@ -235,24 +230,24 @@ export default function PairPage() {
                 type="button"
                 onClick={handleCopyCode}
                 disabled={!generatedCode}
-                className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-white border border-rose-200 text-xs font-medium text-plum-800 hover:bg-rose-50 transition-colors shadow-sm"
+                className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl moi-button-secondary text-xs font-semibold shadow-sm"
               >
                 {copied ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Copied!</span>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-300">Copied!</span>
                   </>
                 ) : (
                   <>
-                    <Copy className="w-3.5 h-3.5 text-plum-600" />
+                    <Copy className="w-4 h-4 text-rose-300" />
                     <span>Copy Code</span>
                   </>
                 )}
               </button>
             </div>
 
-            <div className="flex items-center justify-center space-x-2 text-xs text-plum-500 animate-pulse">
-              <Sparkles className="w-4 h-4 text-rose-300" />
+            <div className="flex items-center justify-center space-x-2 text-xs text-rose-300/60 animate-pulse">
+              <Sparkles className="w-4 h-4 text-amber-300" />
               <span>Waiting for partner to enter code...</span>
             </div>
           </div>
@@ -262,11 +257,11 @@ export default function PairPage() {
         {activeTab === "join" && (
           <form onSubmit={handlePairAccounts} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-plum-700 mb-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-rose-300/80 mb-1.5">
                 Partner's Invite Code
               </label>
               <div className="relative">
-                <Key className="w-5 h-5 absolute left-3.5 top-3.5 text-rose-300" />
+                <Key className="w-5 h-5 absolute left-3.5 top-3.5 text-rose-400/60" />
                 <input
                   type="text"
                   maxLength={6}
@@ -274,26 +269,26 @@ export default function PairPage() {
                   value={partnerCode}
                   onChange={(e) => setPartnerCode(e.target.value.toUpperCase())}
                   placeholder="e.g. A8X9K2"
-                  className="w-full pl-11 pr-4 py-3 rounded-2xl bg-cream-50 border border-rose-100 focus:border-plum-600 focus:bg-white focus:outline-none text-sm font-mono tracking-widest uppercase transition-all"
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-wine-950/60 border border-rose-500/20 text-amber-200 placeholder-rose-300/30 focus:border-rose-400 focus:outline-none text-sm font-mono tracking-widest uppercase transition-all"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-plum-700 mb-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-rose-300/80 mb-1.5">
                 Together Since
               </label>
               <div className="relative">
-                <Calendar className="w-5 h-5 absolute left-3.5 top-3.5 text-rose-300" />
+                <Calendar className="w-5 h-5 absolute left-3.5 top-3.5 text-rose-400/60" />
                 <input
                   type="date"
                   required
                   value={togetherSince}
                   onChange={(e) => setTogetherSince(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 rounded-2xl bg-cream-50 border border-rose-100 focus:border-plum-600 focus:bg-white focus:outline-none text-sm transition-all"
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-wine-950/60 border border-rose-500/20 text-white placeholder-rose-300/30 focus:border-rose-400 focus:outline-none text-sm transition-all"
                 />
               </div>
-              <p className="text-[11px] text-plum-500 mt-1">
+              <p className="text-[11px] text-rose-300/60 mt-1">
                 The date you officially started your journey together.
               </p>
             </div>
@@ -301,7 +296,7 @@ export default function PairPage() {
             <button
               type="submit"
               disabled={isLinking}
-              className="w-full moi-button-primary flex items-center justify-center space-x-2 py-3.5 font-medium disabled:opacity-50"
+              className="w-full moi-button-primary flex items-center justify-center space-x-2 py-3.5 font-semibold text-sm disabled:opacity-50"
             >
               <span>{isLinking ? "Linking Accounts..." : "Complete Pairing"}</span>
               {!isLinking && <ArrowRight className="w-4 h-4" />}

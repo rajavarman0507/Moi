@@ -1,24 +1,22 @@
 :root {
-  /* Warm romantic-but-modern color palette */
-  --color-rose-50: #FDF4F6;
-  --color-rose-100: #F7E4E8;
-  --color-rose-200: #EBBEC7;
-  --color-rose-300: #DE97A5;
-  --color-rose-400: #CE6F82;
+  /* Rich Dark Romantic / Love Color Palette */
+  --color-bg-dark: #12040A;
+  --color-wine-950: #1B0710;
+  --color-wine-900: #2C0B1B;
+  --color-wine-800: #42112A;
+  --color-wine-700: #5D1A3C;
+  --color-wine-600: #7E2452;
 
-  --color-plum-900: #2C1820;
-  --color-plum-800: #42232E;
-  --color-plum-700: #5C3241;
-  --color-plum-600: #784254;
-  --color-plum-500: #965369;
+  --color-rose-500: #E11D48;
+  --color-rose-400: #FB7185;
+  --color-rose-300: #FDA4AF;
+  --color-rose-200: #FECDD3;
+  --color-rose-100: #FFE4E6;
 
-  --color-cream-50: #FCFAF8;
-  --color-cream-100: #FAF5F0;
-  --color-cream-200: #F3EBE1;
+  --color-gold-300: #FDE047;
+  --color-gold-200: #FEF08A;
 
-  --color-sand-500: #D2C4B7;
-
-  /* Elevated cards & modern UI shadows */
-  --shadow-soft: 0 4px 20px -2px rgba(66, 35, 46, 0.05), 0 2px 6px -1px rgba(66, 35, 46, 0.03);
-  --shadow-hover: 0 10px 30px -4px rgba(66, 35, 46, 0.08), 0 4px 12px -2px rgba(66, 35, 46, 0.04);
+  /* Glassmorphism Dark Card & Glowing Shadows */
+  --shadow-dark-card: 0 10px 40px -10px rgba(0, 0, 0, 0.7), 0 0 20px rgba(225, 29, 72, 0.15);
+  --shadow-glow: 0 0 25px rgba(225, 29, 72, 0.35);
 }

@@ -9,32 +9,39 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        wine: {
+          950: "var(--color-wine-950)",
+          900: "var(--color-wine-900)",
+          800: "var(--color-wine-800)",
+          700: "var(--color-wine-700)",
+          600: "var(--color-wine-600)",
+        },
         rose: {
-          50: "var(--color-rose-50)",
-          100: "var(--color-rose-100)",
-          200: "var(--color-rose-200)",
-          300: "var(--color-rose-300)",
+          500: "var(--color-rose-500)",
           400: "var(--color-rose-400)",
+          300: "var(--color-rose-300)",
+          200: "var(--color-rose-200)",
+          100: "var(--color-rose-100)",
         },
-        plum: {
-          500: "var(--color-plum-500)",
-          600: "var(--color-plum-600)",
-          700: "var(--color-plum-700)",
-          800: "var(--color-plum-800)",
-          900: "var(--color-plum-900)",
-        },
-        cream: {
-          50: "var(--color-cream-50)",
-          100: "var(--color-cream-100)",
-          200: "var(--color-cream-200)",
-        },
-        sand: {
-          500: "var(--color-sand-500)",
+        gold: {
+          300: "var(--color-gold-300)",
+          200: "var(--color-gold-200)",
         },
       },
+      keyframes: {
+        "float-up": {
+          "0%": { transform: "translateY(0) rotate(0deg)", opacity: "0" },
+          "15%": { opacity: "0.8" },
+          "85%": { opacity: "0.8" },
+          "100%": { transform: "translateY(-105vh) rotate(360deg)", opacity: "0" },
+        },
+      },
+      animation: {
+        "float-up": "float-up 12s linear infinite",
+      },
       boxShadow: {
-        soft: "var(--shadow-soft)",
-        hover: "var(--shadow-hover)",
+        "dark-card": "var(--shadow-dark-card)",
+        glow: "var(--shadow-glow)",
       },
       borderRadius: {
         "3xl": "1.5rem",

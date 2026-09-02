@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import AppShell from "@/components/AppShell";
 import PwaRegister from "@/components/PwaRegister";
+import SparklingHearts from "@/components/SparklingHearts";
 
 export const metadata: Metadata = {
   title: "Moi - Private Couple App",
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#42232E",
+  themeColor: "#12040A",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -27,7 +28,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased selection:bg-rose-200 selection:text-plum-900">
+      <body className="antialiased selection:bg-rose-500 selection:text-white relative">
+        <SparklingHearts />
         <AuthProvider>
           <AppShell>
             {children}

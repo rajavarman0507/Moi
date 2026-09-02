@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, googleProvider, db } from "@/lib/firebase";
-import { Heart, Mail, Lock, ArrowRight } from "lucide-react";
+import { Heart, Mail, Lock, ArrowRight, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -47,7 +47,6 @@ export default function LoginPage() {
       const userCred = await signInWithPopup(auth, googleProvider);
       const uid = userCred.user.uid;
 
-      // Ensure user doc exists
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
       if (!userSnap.exists()) {
@@ -70,56 +69,59 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-cream-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white/90 backdrop-blur-md p-8 md:p-10 rounded-3xl border border-rose-100 shadow-soft space-y-8">
-        {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-plum-800 to-plum-600 flex items-center justify-center text-cream-50 font-bold text-2xl mx-auto shadow-md">
-            M
+    <div className="min-h-screen flex items-center justify-center p-6 relative z-10">
+      <div className="w-full max-w-md moi-card p-8 md:p-10 space-y-8 relative overflow-hidden">
+        {/* Glow Header */}
+        <div className="text-center space-y-3">
+          <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-rose-600 via-wine-600 to-rose-400 flex items-center justify-center text-white mx-auto shadow-glow">
+            <Heart className="w-7 h-7 fill-white text-white animate-pulse" />
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-plum-900">
-            Welcome back
-          </h1>
-          <p className="text-sm text-plum-500">Sign in to your private couple space</p>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white flex items-center justify-center gap-2">
+              <span>Welcome Back</span>
+              <Sparkles className="w-5 h-5 text-amber-300 animate-spin" style={{ animationDuration: "6s" }} />
+            </h1>
+            <p className="text-sm text-rose-200/70 mt-1">Sign in to your private couple space</p>
+          </div>
         </div>
 
         {error && (
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-400 font-medium">
+          <div className="p-4 rounded-2xl bg-rose-950/80 border border-rose-500/40 text-xs text-rose-300 font-medium">
             {error}
           </div>
         )}
 
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-plum-700 mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-rose-300/80 mb-1.5">
               Email Address
             </label>
             <div className="relative">
-              <Mail className="w-5 h-5 absolute left-3.5 top-3.5 text-rose-300" />
+              <Mail className="w-5 h-5 absolute left-3.5 top-3.5 text-rose-400/60" />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="w-full pl-11 pr-4 py-3 rounded-2xl bg-cream-50 border border-rose-100 focus:border-plum-600 focus:bg-white focus:outline-none text-sm transition-all"
+                className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-wine-950/60 border border-rose-500/20 text-white placeholder-rose-300/30 focus:border-rose-400 focus:outline-none text-sm transition-all"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-plum-700 mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-rose-300/80 mb-1.5">
               Password
             </label>
             <div className="relative">
-              <Lock className="w-5 h-5 absolute left-3.5 top-3.5 text-rose-300" />
+              <Lock className="w-5 h-5 absolute left-3.5 top-3.5 text-rose-400/60" />
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-11 pr-4 py-3 rounded-2xl bg-cream-50 border border-rose-100 focus:border-plum-600 focus:bg-white focus:outline-none text-sm transition-all"
+                className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-wine-950/60 border border-rose-500/20 text-white placeholder-rose-300/30 focus:border-rose-400 focus:outline-none text-sm transition-all"
               />
             </div>
           </div>
@@ -127,7 +129,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full moi-button-primary flex items-center justify-center space-x-2 py-3.5 font-medium disabled:opacity-50"
+            className="w-full moi-button-primary flex items-center justify-center space-x-2 py-3.5 font-semibold text-sm disabled:opacity-50"
           >
             <span>{loading ? "Signing in..." : "Sign In"}</span>
             {!loading && <ArrowRight className="w-4 h-4" />}
@@ -135,8 +137,8 @@ export default function LoginPage() {
         </form>
 
         <div className="relative flex items-center justify-center my-6">
-          <div className="border-t border-rose-100 w-full"></div>
-          <span className="bg-white px-3 text-xs text-plum-500 font-medium uppercase tracking-wider absolute">
+          <div className="border-t border-rose-900/40 w-full"></div>
+          <span className="bg-[#210915] px-3 text-xs text-rose-300/60 font-medium uppercase tracking-wider absolute">
             Or
           </span>
         </div>
@@ -145,7 +147,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full flex items-center justify-center space-x-3 py-3 rounded-2xl bg-cream-100 border border-rose-100 hover:bg-rose-50 text-plum-800 text-sm font-medium transition-colors"
+          className="w-full moi-button-secondary flex items-center justify-center space-x-3 py-3 text-sm font-medium"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -168,9 +170,9 @@ export default function LoginPage() {
           <span>Continue with Google</span>
         </button>
 
-        <p className="text-center text-xs text-plum-600">
+        <p className="text-center text-xs text-rose-300/70">
           Don't have an account yet?{" "}
-          <Link href="/signup" className="font-semibold text-plum-800 hover:underline">
+          <Link href="/signup" className="font-semibold text-rose-400 hover:text-rose-300 underline">
             Create one
           </Link>
         </p>
