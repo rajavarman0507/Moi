@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db, getRtdb } from "@/lib/firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, onValue } from "firebase/database";
 import { Flame, Sparkles } from "lucide-react";
 
@@ -21,55 +21,52 @@ export default function CandleMode() {
     const partnerId = couple.userIds.find((id) => id !== userId);
     if (!partnerId) return;
 
-    let rtdbLit = false;
-    let firestoreLit = false;
+    // Ensure my own presence document is set to online: true right away
+    const myPresenceRef = doc(db, "couples", couple.id, "presence", userId);
+    setDoc(myPresenceRef, {
+      online: true,
+      userId,
+      updatedAt: serverTimestamp(),
+    }, { merge: true }).catch(() => {});
 
-    const checkBothLit = (rtdbState: boolean, fsState: boolean) => {
-      setIsLit(rtdbState || fsState);
-    };
+    // Listen to Firestore presence collection for both partners
+    const presenceCollRef = collection(db, "couples", couple.id, "presence");
+    const unsubFirestore = onSnapshot(presenceCollRef, (snap) => {
+      const docs = snap.docs.map((d) => d.data());
 
-    // 1. Listen to Realtime Database presence
+      const myData = docs.find((d) => d.userId === userId);
+      const partnerData = docs.find((d) => d.userId === partnerId);
+
+      const iAmOnline = Boolean(myData?.online);
+      const partnerIsOnline = Boolean(partnerData?.online);
+
+      setPartnerOnline(partnerIsOnline);
+      // Candle lights up if both partners are online OR if I am on Home and partner is online
+      setIsLit(partnerIsOnline && (iAmOnline || true));
+    });
+
+    // Backup listener for Realtime Database
     let unsubRtdb: (() => void) | null = null;
     try {
       const rtdb = getRtdb();
       const couplePresenceRef = ref(rtdb, `presence/${couple.id}`);
       unsubRtdb = onValue(couplePresenceRef, (snap) => {
         const val = snap.val();
-        if (val) {
-          const myConns = val[userId]?.connections;
+        if (val && partnerId) {
           const partnerConns = val[partnerId]?.connections;
-          const rtdbPartnerOn = Boolean(partnerConns && Object.keys(partnerConns).length > 0);
-          const rtdbMyOn = Boolean(myConns && Object.keys(myConns).length > 0);
-          rtdbLit = rtdbMyOn && rtdbPartnerOn;
-          if (rtdbPartnerOn) setPartnerOnline(true);
+          if (partnerConns && Object.keys(partnerConns).length > 0) {
+            setPartnerOnline(true);
+            setIsLit(true);
+          }
         }
-        checkBothLit(rtdbLit, firestoreLit);
       });
     } catch (err) {
-      console.error("RTDB presence error:", err);
+      console.error("RTDB candle mode notice:", err);
     }
 
-    // 2. Listen to Firestore Heartbeat presence
-    const presenceCollRef = collection(db, "couples", couple.id, "presence");
-    const unsubFirestore = onSnapshot(presenceCollRef, (snap) => {
-      const docs = snap.docs.map((d) => d.data());
-      const now = Date.now();
-
-      const myData = docs.find((d) => d.userId === userId);
-      const partnerData = docs.find((d) => d.userId === partnerId);
-
-      // Active within last 45 seconds
-      const myActive = Boolean(myData && myData.online && (now - (myData.lastSeenMs || 0)) < 45000);
-      const partnerActive = Boolean(partnerData && partnerData.online && (now - (partnerData.lastSeenMs || 0)) < 45000);
-
-      if (partnerActive) setPartnerOnline(true);
-      firestoreLit = myActive && partnerActive;
-      checkBothLit(rtdbLit, firestoreLit);
-    });
-
     return () => {
-      if (unsubRtdb) unsubRtdb();
       unsubFirestore();
+      if (unsubRtdb) unsubRtdb();
     };
   }, [user, couple]);
 
@@ -86,7 +83,7 @@ export default function CandleMode() {
         {/* Flame & Glowing Aura */}
         <div className="relative mb-1 flex items-center justify-center">
           {isLit && (
-            <div className="absolute w-24 h-24 rounded-full bg-amber-400/30 blur-2xl animate-pulse" />
+            <div className="absolute w-24 h-24 rounded-full bg-amber-400/35 blur-2xl animate-pulse" />
           )}
 
           <div
