@@ -156,7 +156,7 @@ export default function ThisOrThatPage() {
 
           {/* Reveal & Status Section */}
           {bothPicked ? (
-            <div className="p-6 rounded-3xl bg-wine-950/80 border border-rose-500/40 space-y-4 animate-float-up" style={{ animationDuration: "0.5s" }}>
+            <div className="p-6 rounded-3xl bg-wine-950/80 border border-rose-500/40 space-y-4">
               {isMatch ? (
                 <div className="space-y-1 text-emerald-300">
                   <div className="w-12 h-12 rounded-full bg-emerald-500/20 mx-auto flex items-center justify-center text-emerald-400 shadow-glow">

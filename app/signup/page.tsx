@@ -81,7 +81,8 @@ export default function SignupPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Alex"
-                className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-wine-950/60 border border-rose-500/20 text-white placeholder-rose-300/30 focus:border-rose-400 focus:outline-none text-sm transition-all"
+                className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white font-medium placeholder-rose-300/40 focus:border-rose-400 focus:outline-none text-sm transition-all shadow-inner"
+                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
               />
             </div>
           </div>
@@ -98,7 +99,8 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-wine-950/60 border border-rose-500/20 text-white placeholder-rose-300/30 focus:border-rose-400 focus:outline-none text-sm transition-all"
+                className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white font-medium placeholder-rose-300/40 focus:border-rose-400 focus:outline-none text-sm transition-all shadow-inner"
+                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
               />
             </div>
           </div>
@@ -115,7 +117,8 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 6 characters"
-                className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-wine-950/60 border border-rose-500/20 text-white placeholder-rose-300/30 focus:border-rose-400 focus:outline-none text-sm transition-all"
+                className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white font-medium placeholder-rose-300/40 focus:border-rose-400 focus:outline-none text-sm transition-all shadow-inner"
+                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
               />
             </div>
           </div>

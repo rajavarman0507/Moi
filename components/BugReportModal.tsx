@@ -81,7 +81,7 @@ export default function BugReportModal() {
       {/* Bug Report Modal */}
       {isOpen && (
         <div className="fixed inset-0 bg-[#12040A]/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="moi-card p-6 md:p-8 max-w-md w-full bg-gradient-to-br from-[#270B19]/95 via-[#3B1124]/95 to-[#1C0512]/95 border border-rose-500/40 space-y-4 shadow-2xl relative animate-float-up">
+          <div className="moi-card p-6 md:p-8 max-w-md w-full bg-gradient-to-br from-[#270B19]/95 via-[#3B1124]/95 to-[#1C0512]/95 border border-rose-500/40 space-y-4 shadow-2xl relative">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <div className="w-8 h-8 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-300">

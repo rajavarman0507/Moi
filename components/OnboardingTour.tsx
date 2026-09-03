@@ -88,7 +88,7 @@ export default function OnboardingTour() {
 
   return (
     <div className="fixed inset-0 bg-[#12040A]/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-      <div className="moi-card p-6 md:p-8 max-w-md w-full bg-gradient-to-br from-[#2F0B1E]/95 via-[#44112B]/95 to-[#230615]/95 border border-rose-500/40 text-center space-y-6 shadow-2xl relative animate-float-up">
+      <div className="moi-card p-6 md:p-8 max-w-md w-full bg-gradient-to-br from-[#2F0B1E]/95 via-[#44112B]/95 to-[#230615]/95 border border-rose-500/40 text-center space-y-6 shadow-2xl relative">
         {/* Step Progress Pills */}
         <div className="flex items-center justify-center space-x-2">
           {TOUR_STEPS.map((_, idx) => (

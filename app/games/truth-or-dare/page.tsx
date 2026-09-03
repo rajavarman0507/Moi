@@ -141,7 +141,7 @@ export default function TruthOrDarePage() {
 
           {/* Drawn Card Step */}
           {gameState?.choice && gameState.cardText && (
-            <div className="p-8 rounded-3xl bg-wine-950/90 border border-rose-500/40 space-y-6 animate-float-up" style={{ animationDuration: "0.5s" }}>
+            <div className="p-8 rounded-3xl bg-wine-950/90 border border-rose-500/40 space-y-6">
               <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-400/30 uppercase tracking-widest">
                 <span>{gameState.choice.toUpperCase()} FOR {activeTurnName.toUpperCase()}</span>
               </div>

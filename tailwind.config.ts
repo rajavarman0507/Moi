@@ -30,14 +30,19 @@ const config: Config = {
       },
       keyframes: {
         "float-up": {
-          "0%": { transform: "translateY(0) rotate(0deg)", opacity: "0" },
-          "15%": { opacity: "0.8" },
-          "85%": { opacity: "0.8" },
-          "100%": { transform: "translateY(-105vh) rotate(360deg)", opacity: "0" },
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "bg-particle": {
+          "0%": { transform: "translateY(0)", opacity: "0" },
+          "20%": { opacity: "0.6" },
+          "80%": { opacity: "0.6" },
+          "100%": { transform: "translateY(-105vh)", opacity: "0" },
         },
       },
       animation: {
-        "float-up": "float-up 12s linear infinite",
+        "float-up": "float-up 0.4s ease-out forwards",
+        "bg-particle": "bg-particle 12s linear infinite",
       },
       boxShadow: {
         "dark-card": "var(--shadow-dark-card)",

@@ -38,7 +38,7 @@ export default function SparklingHearts() {
       {particles.map((p) => (
         <div
           key={p.id}
-          className="absolute animate-float-up"
+          className="absolute animate-bg-particle"
           style={{
             left: `${p.x}%`,
             bottom: "-40px",

@@ -323,7 +323,7 @@ export default function NoticeBoardCanvas() {
         {/* Text Note Popover Modal inside Canvas */}
         {textModalPos && (
           <div
-            className="absolute z-30 p-3 bg-wine-950/95 border border-rose-500/50 rounded-2xl shadow-2xl space-y-2 animate-float-up"
+            className="absolute z-30 p-3 bg-wine-950/95 border border-rose-500/50 rounded-2xl shadow-2xl space-y-2"
             style={{
               left: `${Math.min(textModalPos.x, 500)}px`,
               top: `${Math.min(textModalPos.y, 250)}px`,

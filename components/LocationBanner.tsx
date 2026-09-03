@@ -14,7 +14,7 @@ export default function LocationBanner() {
   const partnerName = partnerProfile?.displayName || partnerProfile?.email?.split("@")[0] || "your partner";
 
   return (
-    <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-emerald-800 text-white px-4 py-2.5 shadow-lg flex items-center justify-between z-50 animate-float-up text-xs border-b border-emerald-400/40">
+    <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-emerald-800 text-white px-4 py-2.5 shadow-lg flex items-center justify-between z-50 text-xs border-b border-emerald-400/40">
       <div className="flex items-center space-x-2.5 font-bold">
         <div className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
         <Navigation className="w-4 h-4 text-emerald-200 animate-pulse" />
