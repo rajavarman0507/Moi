@@ -42,7 +42,7 @@ export default function CasualGamesPage() {
   const player1Name = user?.uid === player1Uid ? myName : partnerName;
   const player2Name = user?.uid === player2Uid ? myName : partnerName;
 
-  // Subscribe to Tic Tac Toe State
+  // Subscribe to Tic Tac Toe State with Auto-Healing
   useEffect(() => {
     if (!couple?.id || !user?.uid || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "ticTacToe");
@@ -50,7 +50,12 @@ export default function CasualGamesPage() {
       ref,
       (snap) => {
         if (snap.exists()) {
-          setTttState(snap.data() as TicTacToeState);
+          const data = snap.data() as TicTacToeState;
+          if (data.currentTurnUid !== player1Uid && data.currentTurnUid !== player2Uid) {
+            data.currentTurnUid = player1Uid;
+            setDoc(ref, { ...data, currentTurnUid: player1Uid, updatedAt: serverTimestamp() }).catch(() => {});
+          }
+          setTttState(data);
         } else {
           const init: TicTacToeState = {
             board: Array(9).fill(null),
@@ -66,7 +71,7 @@ export default function CasualGamesPage() {
     );
   }, [couple, user, player1Uid, player2Uid]);
 
-  // Subscribe to Connect Four State
+  // Subscribe to Connect Four State with Auto-Healing
   useEffect(() => {
     if (!couple?.id || !user?.uid || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "connectFour");
@@ -74,7 +79,12 @@ export default function CasualGamesPage() {
       ref,
       (snap) => {
         if (snap.exists()) {
-          setC4State(snap.data() as ConnectFourState);
+          const data = snap.data() as ConnectFourState;
+          if (data.currentTurnUid !== player1Uid && data.currentTurnUid !== player2Uid) {
+            data.currentTurnUid = player1Uid;
+            setDoc(ref, { ...data, currentTurnUid: player1Uid, updatedAt: serverTimestamp() }).catch(() => {});
+          }
+          setC4State(data);
         } else {
           const emptyGrid = Array.from({ length: 6 }, () => Array(7).fill(null));
           const init: ConnectFourState = {
@@ -91,7 +101,7 @@ export default function CasualGamesPage() {
     );
   }, [couple, user, player1Uid, player2Uid]);
 
-  // Subscribe to Snakes & Ladders State
+  // Subscribe to Snakes & Ladders State with Auto-Healing
   useEffect(() => {
     if (!couple?.id || !user?.uid || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "snakesLadders");
@@ -99,7 +109,12 @@ export default function CasualGamesPage() {
       ref,
       (snap) => {
         if (snap.exists()) {
-          setSnakesState(snap.data() as SnakesLaddersState);
+          const data = snap.data() as SnakesLaddersState;
+          if (data.currentTurnUid !== player1Uid && data.currentTurnUid !== player2Uid) {
+            data.currentTurnUid = player1Uid;
+            setDoc(ref, { ...data, currentTurnUid: player1Uid, updatedAt: serverTimestamp() }).catch(() => {});
+          }
+          setSnakesState(data);
         } else {
           const init: SnakesLaddersState = {
             positions: { [player1Uid]: 1, [player2Uid]: 1 },
@@ -157,7 +172,7 @@ export default function CasualGamesPage() {
   };
 
   const handleResetTtt = async () => {
-    if (!couple?.id || !player1Uid) return;
+    if (!couple?.id || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "ticTacToe");
     await setDoc(ref, {
       board: Array(9).fill(null),
@@ -173,17 +188,22 @@ export default function CasualGamesPage() {
     if (!couple?.id || !user?.uid || !player1Uid || !player2Uid || !c4State || c4State.winner) return;
     if (c4State.currentTurnUid !== user.uid) return;
 
-    // Find lowest empty row in column
+    // Ensure grid is valid 6x7 matrix
+    const currentGrid = (c4State.grid && c4State.grid.length === 6)
+      ? c4State.grid
+      : Array.from({ length: 6 }, () => Array(7).fill(null));
+
+    // Find lowest empty row in column (from bottom row 5 up to top row 0)
     let targetRow = -1;
     for (let r = 5; r >= 0; r--) {
-      if (!c4State.grid[r][colIdx]) {
+      if (!currentGrid[r] || currentGrid[r][colIdx] === null || currentGrid[r][colIdx] === undefined) {
         targetRow = r;
         break;
       }
     }
     if (targetRow === -1) return; // Column full
 
-    const newGrid = c4State.grid.map((row) => [...row]);
+    const newGrid = currentGrid.map((row) => [...(row || Array(7).fill(null))]);
     newGrid[targetRow][colIdx] = user.uid;
 
     const winner = checkC4Winner(newGrid, user.uid);
@@ -207,19 +227,19 @@ export default function CasualGamesPage() {
   const checkC4Winner = (grid: (string | null)[][], uid: string): string | null => {
     for (let r = 0; r < 6; r++) {
       for (let c = 0; c < 7; c++) {
-        const val = grid[r][c];
+        const val = grid[r]?.[c];
         if (!val) continue;
-        if (c + 3 < 7 && val === grid[r][c+1] && val === grid[r][c+2] && val === grid[r][c+3]) return val;
-        if (r + 3 < 6 && val === grid[r+1][c] && val === grid[r+2][c] && val === grid[r+3][c]) return val;
-        if (r + 3 < 6 && c + 3 < 7 && val === grid[r+1][c+1] && val === grid[r+2][c+2] && val === grid[r+3][c+3]) return val;
-        if (r - 3 >= 0 && c + 3 < 7 && val === grid[r-1][c+1] && val === grid[r-2][c+2] && val === grid[r-3][c+3]) return val;
+        if (c + 3 < 7 && val === grid[r]?.[c+1] && val === grid[r]?.[c+2] && val === grid[r]?.[c+3]) return val;
+        if (r + 3 < 6 && val === grid[r+1]?.[c] && val === grid[r+2]?.[c] && val === grid[r+3]?.[c]) return val;
+        if (r + 3 < 6 && c + 3 < 7 && val === grid[r+1]?.[c+1] && val === grid[r+2]?.[c+2] && val === grid[r+3]?.[c+3]) return val;
+        if (r - 3 >= 0 && c + 3 < 7 && val === grid[r-1]?.[c+1] && val === grid[r-2]?.[c+2] && val === grid[r-3]?.[c+3]) return val;
       }
     }
     return null;
   };
 
   const handleResetC4 = async () => {
-    if (!couple?.id || !player1Uid) return;
+    if (!couple?.id || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "connectFour");
     await setDoc(ref, {
       grid: Array.from({ length: 6 }, () => Array(7).fill(null)),
@@ -345,7 +365,7 @@ export default function CasualGamesPage() {
               
               <div className={`px-3 py-1 rounded-full text-xs font-extrabold flex items-center space-x-1.5 ${
                 isMyTttTurn
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-glow"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-glow animate-pulse"
                   : "bg-rose-500/20 text-rose-300 border border-rose-400/30"
               }`}>
                 <span>{isMyTttTurn ? "Your Turn! 🎯" : `${tttTurnName}'s Turn`}</span>
@@ -368,6 +388,7 @@ export default function CasualGamesPage() {
                 return (
                   <button
                     key={idx}
+                    type="button"
                     onClick={() => handleTttCellClick(idx)}
                     disabled={!isMyTttTurn || Boolean(cell) || Boolean(tttState?.winner)}
                     className={`w-full h-full border rounded-2xl flex items-center justify-center text-3xl font-bold transition-all ${
@@ -375,7 +396,9 @@ export default function CasualGamesPage() {
                         ? "bg-rose-600/80 border-rose-400 text-white shadow-glow"
                         : isP2
                         ? "bg-amber-500/80 border-amber-300 text-black shadow-glow"
-                        : "bg-wine-900/60 border-rose-500/30 hover:bg-rose-950/80"
+                        : isMyTttTurn
+                        ? "bg-wine-900/60 border-rose-500/30 hover:bg-rose-950/80 cursor-pointer"
+                        : "bg-wine-950/60 border-rose-900/20 opacity-70 cursor-not-allowed"
                     }`}
                   >
                     {isP1 ? "♥" : isP2 ? "★" : ""}
@@ -422,15 +445,19 @@ export default function CasualGamesPage() {
 
             <div className="grid grid-cols-7 gap-2 p-4 bg-wine-900/80 rounded-3xl border border-rose-500/30">
               {Array.from({ length: 7 }).map((_, colIdx) => (
-                <div
+                <button
                   key={colIdx}
+                  type="button"
                   onClick={() => handleC4ColumnClick(colIdx)}
-                  className={`space-y-2 transition-opacity ${
-                    isMyC4Turn && !c4State?.winner ? "cursor-pointer hover:opacity-80" : "cursor-not-allowed opacity-90"
+                  disabled={!isMyC4Turn || Boolean(c4State?.winner)}
+                  className={`flex flex-col space-y-2 p-1.5 rounded-2xl transition-all ${
+                    isMyC4Turn && !c4State?.winner
+                      ? "hover:bg-rose-500/20 cursor-pointer"
+                      : "cursor-not-allowed opacity-90"
                   }`}
                 >
                   {Array.from({ length: 6 }).map((_, rowIdx) => {
-                    const cellOwner = c4State?.grid[rowIdx][colIdx];
+                    const cellOwner = c4State?.grid?.[rowIdx]?.[colIdx];
                     const isP1 = cellOwner === player1Uid;
                     const isP2 = cellOwner === player2Uid;
 
@@ -442,14 +469,14 @@ export default function CasualGamesPage() {
                             ? "bg-rose-500 shadow-glow text-white font-extrabold"
                             : isP2
                             ? "bg-amber-400 shadow-glow text-black font-extrabold"
-                            : "bg-wine-950/80"
+                            : "bg-wine-950/80 pointer-events-none"
                         }`}
                       >
                         {isP1 ? "🔴" : isP2 ? "🟡" : ""}
                       </div>
                     );
                   })}
-                </div>
+                </button>
               ))}
             </div>
 
@@ -465,7 +492,7 @@ export default function CasualGamesPage() {
 
               <div className={`px-3 py-1 rounded-full text-xs font-extrabold flex items-center space-x-1.5 ${
                 isMySnakesTurn
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-glow"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-glow animate-pulse"
                   : "bg-rose-500/20 text-rose-300 border border-rose-400/30"
               }`}>
                 <span>{isMySnakesTurn ? "Your Turn! 🎯" : `${snakesTurnName}'s Turn`}</span>
