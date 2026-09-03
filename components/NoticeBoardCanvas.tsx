@@ -3,7 +3,22 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  addDoc,
+  getDoc,
+  getDocs,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  limitToLast,
+  limit,
+  getCountFromServer,
+  writeBatch,
+  serverTimestamp,
+} from "firebase/firestore";
 import {
   Pencil,
   Type,
@@ -13,6 +28,7 @@ import {
   Sparkles,
   Send,
   X,
+  AlertTriangle,
 } from "lucide-react";
 
 interface StrokePoint {
@@ -31,6 +47,7 @@ export interface NoticeElement {
   x?: number; // Normalized 0..1
   y?: number; // Normalized 0..1
   authorName?: string;
+  createdAt?: any;
 }
 
 const COLORS = ["#FB7185", "#FDE047", "#60A5FA", "#34D399", "#A78BFA", "#FFFFFF", "#000000"];
@@ -39,7 +56,7 @@ const EMOJIS = ["❤️", "🥰", "✨", "🌹", "💌", "💍", "💋", "☕", 
 type ActiveTool = "draw" | "text" | "emoji";
 
 export default function NoticeBoardCanvas() {
-  const { user, couple, userProfile } = useAuth();
+  const { couple, userProfile } = useAuth();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const [activeTool, setActiveTool] = useState<ActiveTool>("draw");
@@ -55,9 +72,12 @@ export default function NoticeBoardCanvas() {
   const [textModalPos, setTextModalPos] = useState<{ x: number; y: number; normX: number; normY: number } | null>(null);
   const [noteInputText, setNoteInputText] = useState<string>("");
 
-  const myName = userProfile?.displayName || userProfile?.email?.split("@")[0] || "You";
+  // Clear Board Confirmation Modal state
+  const [showClearConfirm, setShowClearConfirm] = useState<boolean>(false);
+  const [isClearing, setIsClearing] = useState<boolean>(false);
 
-  const docRef = couple?.id ? doc(db, "couples", couple.id, "noticeBoard", "current") : null;
+  const myName = userProfile?.displayName || userProfile?.email?.split("@")[0] || "You";
+  const coupleId = couple?.id;
 
   // Render elements onto HTML5 canvas
   const renderAllElements = (els: NoticeElement[]) => {
@@ -106,28 +126,103 @@ export default function NoticeBoardCanvas() {
     });
   };
 
-  // Subscribe to Firestore noticeBoard document in real-time
+  // 1. One-Time Legacy Migration check on mount
   useEffect(() => {
-    if (!docRef) return;
+    if (!coupleId) return;
 
-    const unsubscribe = onSnapshot(docRef, (snap) => {
+    const legacyDocRef = doc(db, "couples", coupleId, "noticeBoard", "current");
+    const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+
+    getDoc(legacyDocRef).then(async (snap) => {
       if (snap.exists()) {
-        const data = snap.data();
-        const loaded: NoticeElement[] = data.elements || [];
-        setElements(loaded);
-        renderAllElements(loaded);
-      } else {
-        setElements([]);
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const ctx = canvas.getContext("2d");
-          if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const legacyData = snap.data();
+        const legacyElements: NoticeElement[] = legacyData.elements || [];
+
+        if (legacyElements.length > 0) {
+          console.log(`Migrating ${legacyElements.length} legacy notice board elements...`);
+          // Chunked migration in batches of 400
+          for (let i = 0; i < legacyElements.length; i += 400) {
+            const chunk = legacyElements.slice(i, i + 400);
+            const batch = writeBatch(db);
+
+            chunk.forEach((el) => {
+              const newDocRef = doc(itemsCollRef);
+              batch.set(newDocRef, {
+                type: el.type,
+                points: el.points || null,
+                color: el.color || "#FB7185",
+                width: el.width || 5,
+                text: el.text || null,
+                emoji: el.emoji || null,
+                x: el.x !== undefined ? el.x : null,
+                y: el.y !== undefined ? el.y : null,
+                authorName: el.authorName || myName,
+                createdAt: serverTimestamp(),
+              });
+            });
+
+            await batch.commit();
+          }
         }
+        await deleteDoc(legacyDocRef);
       }
+    }).catch((err) => console.error("Legacy migration error:", err));
+  }, [coupleId, myName]);
+
+  // 2. Real-time Subscription to most recent 200 items in subcollection
+  useEffect(() => {
+    if (!coupleId) return;
+
+    const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+    const q = query(itemsCollRef, orderBy("createdAt", "asc"), limitToLast(200));
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const loaded: NoticeElement[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as NoticeElement[];
+
+      setElements(loaded);
+      renderAllElements(loaded);
     });
 
     return () => unsubscribe();
-  }, [couple]);
+  }, [coupleId]);
+
+  // 3. Client-Side Pruning Trigger using getCountFromServer()
+  const checkAndPruneOldItems = async () => {
+    if (!coupleId) return;
+
+    try {
+      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+      const countSnap = await getCountFromServer(itemsCollRef);
+      const totalCount = countSnap.data().count;
+
+      if (totalCount > 300) {
+        const excess = totalCount - 200;
+        console.log(`Notice board items count (${totalCount}) exceeds 300. Pruning ${excess} oldest items...`);
+
+        const oldestQuery = query(itemsCollRef, orderBy("createdAt", "asc"), limit(excess));
+        const oldestDocsSnap = await getDocs(oldestQuery);
+
+        // Chunked batch deletion in batches of 400 docs
+        const docSnaps = oldestDocsSnap.docs;
+        for (let i = 0; i < docSnaps.length; i += 400) {
+          const chunk = docSnaps.slice(i, i + 400);
+          const batch = writeBatch(db);
+          chunk.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      }
+    } catch (err) {
+      console.error("Error during notice board pruning:", err);
+    }
+  };
+
+  // Run pruning check on mount
+  useEffect(() => {
+    checkAndPruneOldItems();
+  }, [coupleId]);
 
   // Coordinate helper
   const getNormCoords = (clientX: number, clientY: number) => {
@@ -160,18 +255,17 @@ export default function NoticeBoardCanvas() {
       });
       setNoteInputText("");
     } else if (activeTool === "emoji") {
-      const newEmojiEl: NoticeElement = {
-        id: `emoji_${Date.now()}_${Math.random()}`,
+      if (!coupleId) return;
+      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+
+      addDoc(itemsCollRef, {
         type: "emoji",
         emoji: selectedEmoji,
         x: coords.normX,
         y: coords.normY,
         authorName: myName,
-      };
-      const updated = [...elements, newEmojiEl];
-      setElements(updated);
-      renderAllElements(updated);
-      saveElementsToFirestore(updated);
+        createdAt: serverTimestamp(),
+      }).then(() => checkAndPruneOldItems()).catch((err) => console.error("Error adding emoji stamp:", err));
     }
   };
 
@@ -208,18 +302,17 @@ export default function NoticeBoardCanvas() {
     if (activeTool !== "draw" || !isDrawing) return;
     setIsDrawing(false);
 
-    if (currentStrokePoints.current.length > 0) {
-      const newStrokeEl: NoticeElement = {
-        id: `stroke_${Date.now()}_${Math.random()}`,
+    if (currentStrokePoints.current.length > 0 && coupleId) {
+      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+
+      addDoc(itemsCollRef, {
         type: "stroke",
         points: currentStrokePoints.current,
         color: selectedColor,
         width: lineWidth,
         authorName: myName,
-      };
-      const updated = [...elements, newStrokeEl];
-      setElements(updated);
-      saveElementsToFirestore(updated);
+        createdAt: serverTimestamp(),
+      }).then(() => checkAndPruneOldItems()).catch((err) => console.error("Error adding stroke item:", err));
     }
     currentStrokePoints.current = [];
   };
@@ -227,52 +320,52 @@ export default function NoticeBoardCanvas() {
   // Submit Text Note
   const handleAddTextNote = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!textModalPos || !noteInputText.trim()) return;
+    if (!textModalPos || !noteInputText.trim() || !coupleId) return;
 
-    const newTextEl: NoticeElement = {
-      id: `text_${Date.now()}_${Math.random()}`,
+    const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+
+    addDoc(itemsCollRef, {
       type: "text",
       text: noteInputText.trim(),
       color: selectedColor,
       x: textModalPos.normX,
       y: textModalPos.normY,
       authorName: myName,
-    };
-
-    const updated = [...elements, newTextEl];
-    setElements(updated);
-    renderAllElements(updated);
-    saveElementsToFirestore(updated);
+      createdAt: serverTimestamp(),
+    }).then(() => checkAndPruneOldItems()).catch((err) => console.error("Error adding text note:", err));
 
     setTextModalPos(null);
     setNoteInputText("");
   };
 
-  // Save to Firestore
-  const saveElementsToFirestore = async (newEls: NoticeElement[]) => {
-    if (!docRef) return;
-    try {
-      await setDoc(docRef, {
-        elements: newEls,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (err) {
-      console.error("Error saving notice board to Firestore:", err);
-    }
-  };
+  // Chunked Batch Delete Clear Board
+  const handleConfirmClearBoard = async () => {
+    if (!coupleId) return;
+    setIsClearing(true);
 
-  const handleClearBoard = async () => {
-    setElements([]);
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-    if (docRef) {
-      await setDoc(docRef, {
-        elements: [],
-        updatedAt: serverTimestamp(),
-      });
+    try {
+      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+      const allDocsSnap = await getDocs(itemsCollRef);
+      const docSnaps = allDocsSnap.docs;
+
+      for (let i = 0; i < docSnaps.length; i += 400) {
+        const chunk = docSnaps.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+
+      setElements([]);
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    } catch (err) {
+      console.error("Error clearing notice board:", err);
+    } finally {
+      setIsClearing(false);
+      setShowClearConfirm(false);
     }
   };
 
@@ -286,7 +379,7 @@ export default function NoticeBoardCanvas() {
         </div>
 
         <button
-          onClick={handleClearBoard}
+          onClick={() => setShowClearConfirm(true)}
           className="px-3 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-500/30 text-xs font-bold text-rose-300 flex items-center space-x-1.5 transition-colors"
         >
           <RotateCcw className="w-3.5 h-3.5" />
@@ -446,6 +539,41 @@ export default function NoticeBoardCanvas() {
           </div>
         )}
       </div>
+
+      {/* Clear Board Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-[#12040A]/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="moi-card p-6 max-w-sm w-full bg-gradient-to-br from-[#2F0B1E] to-[#1C0512] border border-rose-500/40 space-y-4 text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 mx-auto flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1">
+              <h4 className="text-base font-bold text-white">Clear Notice Board?</h4>
+              <p className="text-xs text-rose-200/70">
+                This will erase all doodles, notes, and emojis on the board for both of you. This cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-rose-300/70 hover:text-white"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleConfirmClearBoard}
+                disabled={isClearing}
+                className="moi-button-primary px-5 py-2 text-xs font-extrabold"
+              >
+                {isClearing ? "Clearing..." : "Yes, Clear Board"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
