@@ -25,17 +25,23 @@ export function usePartnerPresence() {
     if (!partnerId) return;
 
     const partnerPresenceRef = doc(db, "couples", couple.id, "presence", partnerId);
-    const unsubscribe = onSnapshot(partnerPresenceRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() as PartnerPresenceData;
-        setPresence({
-          online: Boolean(data.online),
-          currentPath: data.currentPath || "/",
-        });
-      } else {
-        setPresence({ online: false, currentPath: "/" });
+    const unsubscribe = onSnapshot(
+      partnerPresenceRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as PartnerPresenceData;
+          setPresence({
+            online: Boolean(data.online),
+            currentPath: data.currentPath || "/",
+          });
+        } else {
+          setPresence({ online: false, currentPath: "/" });
+        }
+      },
+      (err) => {
+        console.error("Partner presence snapshot error:", err);
       }
-    });
+    );
 
     return () => unsubscribe();
   }, [user, couple]);

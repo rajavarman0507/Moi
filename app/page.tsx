@@ -45,7 +45,7 @@ export default function HomePage() {
         if (snap.exists()) {
           setPromptCompleted(true);
         }
-      });
+      }).catch((err) => console.warn("Prompt complete check error:", err));
     }
   }, [utcToday, couple, user]);
 

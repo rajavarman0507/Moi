@@ -31,37 +31,49 @@ export default function CandleMode() {
 
     // Listen to Firestore presence collection for both partners
     const presenceCollRef = collection(db, "couples", couple.id, "presence");
-    const unsubFirestore = onSnapshot(presenceCollRef, (snap) => {
-      const docs = snap.docs.map((d) => d.data());
+    const unsubFirestore = onSnapshot(
+      presenceCollRef,
+      (snap) => {
+        const docs = snap.docs.map((d) => d.data());
 
-      const myData = docs.find((d) => d.userId === userId);
-      const partnerData = docs.find((d) => d.userId === partnerId);
+        const myData = docs.find((d) => d.userId === userId);
+        const partnerData = docs.find((d) => d.userId === partnerId);
 
-      const iAmOnline = Boolean(myData?.online);
-      const partnerIsOnline = Boolean(partnerData?.online);
+        const iAmOnline = Boolean(myData?.online);
+        const partnerIsOnline = Boolean(partnerData?.online);
 
-      setPartnerOnline(partnerIsOnline);
-      // Candle lights up if both partners are online OR if I am on Home and partner is online
-      setIsLit(partnerIsOnline && (iAmOnline || true));
-    });
+        setPartnerOnline(partnerIsOnline);
+        // Candle lights up if both partners are online OR if I am on Home and partner is online
+        setIsLit(partnerIsOnline && (iAmOnline || true));
+      },
+      (err) => {
+        console.error("CandleMode presence snapshot error:", err);
+      }
+    );
 
     // Backup listener for Realtime Database
     let unsubRtdb: (() => void) | null = null;
     try {
       const rtdb = getRtdb();
       const couplePresenceRef = ref(rtdb, `presence/${couple.id}`);
-      unsubRtdb = onValue(couplePresenceRef, (snap) => {
-        const val = snap.val();
-        if (val && partnerId) {
-          const partnerConns = val[partnerId]?.connections;
-          if (partnerConns && Object.keys(partnerConns).length > 0) {
-            setPartnerOnline(true);
-            setIsLit(true);
+      unsubRtdb = onValue(
+        couplePresenceRef,
+        (snap) => {
+          const val = snap.val();
+          if (val && partnerId) {
+            const partnerConns = val[partnerId]?.connections;
+            if (partnerConns && Object.keys(partnerConns).length > 0) {
+              setPartnerOnline(true);
+              setIsLit(true);
+            }
           }
+        },
+        (err) => {
+          console.error("RTDB candle mode notice:", err);
         }
-      });
+      );
     } catch (err) {
-      console.error("RTDB candle mode notice:", err);
+      console.error("RTDB candle mode init notice:", err);
     }
 
     return () => {
