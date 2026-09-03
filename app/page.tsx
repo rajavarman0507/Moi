@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { getDailyPromptForDate, DailyPrompt } from "@/lib/dailyPrompt";
 import CandleMode from "@/components/CandleMode";
+import NoticeBoardCanvas from "@/components/NoticeBoardCanvas";
 import { Heart, Calendar, Gamepad2, Sparkles, Lock, Layers, ArrowRight, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -191,6 +192,9 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* Shared Couple Notice & Doodle Board */}
+      <NoticeBoardCanvas />
 
       {/* Feature Navigation Cards Grid */}
       <div className="space-y-4">
