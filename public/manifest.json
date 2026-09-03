@@ -1,21 +1,30 @@
 {
-  "name": "Moi - Private Couple App",
+  "name": "Moi - Private Couple Space",
   "short_name": "Moi",
-  "description": "A private web app for couples to connect, play games, and journal together.",
+  "description": "Private space built exclusively for two: games, daily prompts, mood tracking, encrypted love letters & live location.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAF8F5",
-  "theme_color": "#42232E",
+  "orientation": "portrait",
+  "background_color": "#16060E",
+  "theme_color": "#16060E",
   "icons": [
     {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/favicon.ico",
+      "type": "image/x-icon",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "type": "image/x-icon",
       "sizes": "512x512",
-      "type": "image/png"
+      "purpose": "any maskable"
     }
-  ]
+  ],
+  "categories": ["lifestyle", "social", "entertainment"]
 }

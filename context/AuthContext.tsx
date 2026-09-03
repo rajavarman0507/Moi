@@ -10,6 +10,7 @@ export interface UserProfile {
   email: string;
   displayName?: string;
   coupleId?: string | null;
+  onboardingCompleted?: boolean;
   createdAt?: any;
 }
 

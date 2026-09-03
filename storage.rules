@@ -12,9 +12,16 @@ service firebase.storage {
       return isAuthenticated() && (request.auth.uid in firestore.get(/databases/(default)/documents/couples/$(coupleId)).data.userIds);
     }
 
-    // Strict Cloud Storage Rules: ONLY the 2 paired users in a couple can read/write memory files!
+    // Strict Cloud Storage Rules for Couple Memories: ONLY the 2 paired users can access!
     match /couples/{coupleId}/{allPaths=**} {
       allow read, write: if isPartnerInCouple(coupleId);
+    }
+
+    // Cloud Storage Rules for Bug Report Screenshots: User can upload to their own userId folder
+    // Public read/update/delete denied to protect privacy
+    match /bugReports/{userId}/{allPaths=**} {
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow read, update, delete: if false;
     }
   }
 }
