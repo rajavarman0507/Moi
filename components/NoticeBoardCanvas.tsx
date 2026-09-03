@@ -12,8 +12,6 @@ import {
   deleteDoc,
   onSnapshot,
   query,
-  orderBy,
-  limitToLast,
   limit,
   getCountFromServer,
   writeBatch,
@@ -166,25 +164,38 @@ export default function NoticeBoardCanvas() {
         }
         await deleteDoc(legacyDocRef);
       }
-    }).catch((err) => console.error("Legacy migration error:", err));
+    }).catch((err) => console.warn("Legacy migration notice:", err));
   }, [coupleId, myName]);
 
-  // 2. Real-time Subscription to most recent 200 items in subcollection
+  // 2. Real-time Subscription to items subcollection with safe limit & error callback
   useEffect(() => {
     if (!coupleId) return;
 
     const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
-    const q = query(itemsCollRef, orderBy("createdAt", "asc"), limitToLast(200));
+    const q = query(itemsCollRef, limit(200));
 
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const loaded: NoticeElement[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      })) as NoticeElement[];
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const loaded: NoticeElement[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as NoticeElement[];
 
-      setElements(loaded);
-      renderAllElements(loaded);
-    });
+        // Sort chronologically in memory safely
+        loaded.sort((a, b) => {
+          const tA = a.createdAt?.seconds || a.createdAt?.toMillis?.() || 0;
+          const tB = b.createdAt?.seconds || b.createdAt?.toMillis?.() || 0;
+          return tA - tB;
+        });
+
+        setElements(loaded);
+        renderAllElements(loaded);
+      },
+      (err) => {
+        console.error("NoticeBoard onSnapshot error:", err);
+      }
+    );
 
     return () => unsubscribe();
   }, [coupleId]);
@@ -202,8 +213,7 @@ export default function NoticeBoardCanvas() {
         const excess = totalCount - 200;
         console.log(`Notice board items count (${totalCount}) exceeds 300. Pruning ${excess} oldest items...`);
 
-        const oldestQuery = query(itemsCollRef, orderBy("createdAt", "asc"), limit(excess));
-        const oldestDocsSnap = await getDocs(oldestQuery);
+        const oldestDocsSnap = await getDocs(query(itemsCollRef, limit(excess)));
 
         // Chunked batch deletion in batches of 400 docs
         const docSnaps = oldestDocsSnap.docs;
@@ -215,7 +225,7 @@ export default function NoticeBoardCanvas() {
         }
       }
     } catch (err) {
-      console.error("Error during notice board pruning:", err);
+      console.warn("Notice board pruning skipped:", err);
     }
   };
 

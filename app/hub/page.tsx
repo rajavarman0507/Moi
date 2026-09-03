@@ -88,10 +88,14 @@ export default function PrivateHubPage() {
     if (!coupleId || !unlockedPin) return;
 
     const lettersCollRef = collection(db, "couples", coupleId, "privateHub", "letters", "items");
-    const unsubscribe = onSnapshot(lettersCollRef, (snap) => {
-      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as LetterDoc[];
-      setRawLetters(docs);
-    });
+    const unsubscribe = onSnapshot(
+      lettersCollRef,
+      (snap) => {
+        const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as LetterDoc[];
+        setRawLetters(docs);
+      },
+      (err) => console.error("Letters onSnapshot error:", err)
+    );
 
     return () => unsubscribe();
   }, [coupleId, unlockedPin]);
@@ -135,12 +139,16 @@ export default function PrivateHubPage() {
     if (!coupleId || !unlockedPin) return;
 
     const memsCollRef = collection(db, "couples", coupleId, "privateHub", "memories", "items");
-    const unsubscribe = onSnapshot(memsCollRef, (snap) => {
-      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as MemoryDoc[];
-      // Sort chronologically descending
-      docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setMemories(docs);
-    });
+    const unsubscribe = onSnapshot(
+      memsCollRef,
+      (snap) => {
+        const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as MemoryDoc[];
+        // Sort chronologically descending
+        docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setMemories(docs);
+      },
+      (err) => console.error("Memories onSnapshot error:", err)
+    );
 
     return () => unsubscribe();
   }, [coupleId, unlockedPin]);
