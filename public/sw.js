@@ -1,5 +1,5 @@
 // Moi Web App - Versioned Service Worker for PWA Installability
-const CACHE_NAME = 'moi-v1.0.1';
+const CACHE_NAME = 'moi-v1.0.2';
 
 const STATIC_ASSETS = [
   '/',
@@ -7,9 +7,9 @@ const STATIC_ASSETS = [
   '/favicon.ico',
 ];
 
-// Install Event - Pre-cache Static App Shell
+// Install Event - Skip waiting immediately
 self.addEventListener('install', (event) => {
-  self.skipWaiting(); // Immediate takeover on deploy
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
@@ -17,7 +17,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate Event - Evict Stale Old Caches
+// Activate Event - Evict all stale old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -26,11 +26,11 @@ self.addEventListener('activate', (event) => {
           .filter((name) => name !== CACHE_NAME)
           .map((name) => caches.delete(name))
       );
-    }).then(() => self.clients.claim()) // Claim clients immediately
+    }).then(() => self.clients.claim())
   );
 });
 
-// Fetch Event - Network-first for dynamic & Firestore, Cache-first ONLY for static assets
+// Fetch Event - Network-First for ALL requests to guarantee live updates
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -41,34 +41,23 @@ self.addEventListener('fetch', (event) => {
     url.origin.includes('googleapis') ||
     url.pathname.startsWith('/api/')
   ) {
-    return; // Pass through to network
-  }
-
-  // Cache-first ONLY for Next.js static chunks & assets
-  if (url.pathname.startsWith('/_next/static/') || url.pathname.endsWith('.png') || url.pathname.endsWith('.ico')) {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        return fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-          }
-          return networkResponse;
-        });
-      })
-    );
     return;
   }
 
-  // Network-first for HTML pages with fallback to cache
+  // Network-First strategy for application routes & Next.js static assets
   event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(event.request);
+      })
   );
 });

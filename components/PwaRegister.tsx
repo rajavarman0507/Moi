@@ -9,6 +9,8 @@ export default function PwaRegister() {
         .register("/sw.js")
         .then((reg) => {
           console.log("Service Worker registered successfully:", reg.scope);
+          // Force service worker update check on load to prevent stale code caching
+          reg.update().catch(() => {});
         })
         .catch((err) => {
           console.error("Service Worker registration failed:", err);
