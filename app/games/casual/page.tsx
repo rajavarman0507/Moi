@@ -71,7 +71,7 @@ export default function CasualGamesPage() {
     );
   }, [couple, user, player1Uid, player2Uid]);
 
-  // Subscribe to Connect Four State with Auto-Healing
+  // Subscribe to Connect Four State with Flat Matrix Auto-Healing
   useEffect(() => {
     if (!couple?.id || !user?.uid || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "connectFour");
@@ -79,16 +79,22 @@ export default function CasualGamesPage() {
       ref,
       (snap) => {
         if (snap.exists()) {
-          const data = snap.data() as ConnectFourState;
+          const raw = snap.data();
+          let data = raw as ConnectFourState;
+
+          // Migrate 2D array to flat 42 array if needed
+          if (!Array.isArray(data.grid) || data.grid.length !== 42) {
+            data.grid = Array(42).fill(null);
+          }
+
           if (data.currentTurnUid !== player1Uid && data.currentTurnUid !== player2Uid) {
             data.currentTurnUid = player1Uid;
             setDoc(ref, { ...data, currentTurnUid: player1Uid, updatedAt: serverTimestamp() }).catch(() => {});
           }
           setC4State(data);
         } else {
-          const emptyGrid = Array.from({ length: 6 }, () => Array(7).fill(null));
           const init: ConnectFourState = {
-            grid: emptyGrid,
+            grid: Array(42).fill(null),
             currentTurnUid: player1Uid,
             winner: null,
             scores: { [player1Uid]: 0, [player2Uid]: 0 },
@@ -183,30 +189,31 @@ export default function CasualGamesPage() {
     });
   };
 
-  // --- CONNECT FOUR LOGIC ---
+  // --- CONNECT FOUR LOGIC (Flat 42-Element Matrix) ---
   const handleC4ColumnClick = async (colIdx: number) => {
     if (!couple?.id || !user?.uid || !player1Uid || !player2Uid || !c4State || c4State.winner) return;
     if (c4State.currentTurnUid !== user.uid) return;
 
-    // Ensure grid is valid 6x7 matrix
-    const currentGrid = (c4State.grid && c4State.grid.length === 6)
-      ? c4State.grid
-      : Array.from({ length: 6 }, () => Array(7).fill(null));
+    const currentBoard = (Array.isArray(c4State.grid) && c4State.grid.length === 42)
+      ? [...c4State.grid]
+      : Array(42).fill(null);
 
-    // Find lowest empty row in column (from bottom row 5 up to top row 0)
-    let targetRow = -1;
+    // Search from bottom row (5) up to top row (0) for an empty cell in column colIdx
+    let targetIdx = -1;
     for (let r = 5; r >= 0; r--) {
-      if (!currentGrid[r] || currentGrid[r][colIdx] === null || currentGrid[r][colIdx] === undefined) {
-        targetRow = r;
+      const idx = r * 7 + colIdx;
+      if (!currentBoard[idx]) {
+        targetIdx = idx;
         break;
       }
     }
-    if (targetRow === -1) return; // Column full
 
-    const newGrid = currentGrid.map((row) => [...(row || Array(7).fill(null))]);
-    newGrid[targetRow][colIdx] = user.uid;
+    if (targetIdx === -1) return; // Column full
 
-    const winner = checkC4Winner(newGrid, user.uid);
+    const newBoard = [...currentBoard];
+    newBoard[targetIdx] = user.uid;
+
+    const winner = checkC4Winner(newBoard, user.uid);
     const nextTurn = winner ? c4State.currentTurnUid : (user.uid === player1Uid ? player2Uid : player1Uid);
 
     const newScores = { ...(c4State.scores || {}) };
@@ -216,7 +223,7 @@ export default function CasualGamesPage() {
 
     const ref = doc(db, "couples", couple.id, "games", "connectFour");
     await setDoc(ref, {
-      grid: newGrid,
+      grid: newBoard,
       currentTurnUid: nextTurn,
       winner: winner,
       scores: newScores,
@@ -224,17 +231,41 @@ export default function CasualGamesPage() {
     });
   };
 
-  const checkC4Winner = (grid: (string | null)[][], uid: string): string | null => {
+  const checkC4Winner = (board: (string | null)[], uid: string): string | null => {
     for (let r = 0; r < 6; r++) {
       for (let c = 0; c < 7; c++) {
-        const val = grid[r]?.[c];
+        const idx = r * 7 + c;
+        const val = board[idx];
         if (!val) continue;
-        if (c + 3 < 7 && val === grid[r]?.[c+1] && val === grid[r]?.[c+2] && val === grid[r]?.[c+3]) return val;
-        if (r + 3 < 6 && val === grid[r+1]?.[c] && val === grid[r+2]?.[c] && val === grid[r+3]?.[c]) return val;
-        if (r + 3 < 6 && c + 3 < 7 && val === grid[r+1]?.[c+1] && val === grid[r+2]?.[c+2] && val === grid[r+3]?.[c+3]) return val;
-        if (r - 3 >= 0 && c + 3 < 7 && val === grid[r-1]?.[c+1] && val === grid[r-2]?.[c+2] && val === grid[r-3]?.[c+3]) return val;
+
+        // Horizontal (right)
+        if (c + 3 < 7) {
+          if (val === board[r * 7 + c + 1] && val === board[r * 7 + c + 2] && val === board[r * 7 + c + 3]) {
+            return val;
+          }
+        }
+        // Vertical (down)
+        if (r + 3 < 6) {
+          if (val === board[(r + 1) * 7 + c] && val === board[(r + 2) * 7 + c] && val === board[(r + 3) * 7 + c]) {
+            return val;
+          }
+        }
+        // Diagonal Down-Right
+        if (r + 3 < 6 && c + 3 < 7) {
+          if (val === board[(r + 1) * 7 + c + 1] && val === board[(r + 2) * 7 + c + 2] && val === board[(r + 3) * 7 + c + 3]) {
+            return val;
+          }
+        }
+        // Diagonal Up-Right
+        if (r - 3 >= 0 && c + 3 < 7) {
+          if (val === board[(r - 1) * 7 + c + 1] && val === board[(r - 2) * 7 + c + 2] && val === board[(r - 3) * 7 + c + 3]) {
+            return val;
+          }
+        }
       }
     }
+
+    if (board.every((cell) => cell !== null && cell !== undefined)) return "draw";
     return null;
   };
 
@@ -242,7 +273,7 @@ export default function CasualGamesPage() {
     if (!couple?.id || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "connectFour");
     await setDoc(ref, {
-      grid: Array.from({ length: 6 }, () => Array(7).fill(null)),
+      grid: Array(42).fill(null),
       currentTurnUid: player1Uid,
       winner: null,
       scores: c4State?.scores || { [player1Uid]: 0, [player2Uid]: 0 },
@@ -390,14 +421,13 @@ export default function CasualGamesPage() {
                     key={idx}
                     type="button"
                     onClick={() => handleTttCellClick(idx)}
-                    disabled={!isMyTttTurn || Boolean(cell) || Boolean(tttState?.winner)}
                     className={`w-full h-full border rounded-2xl flex items-center justify-center text-3xl font-bold transition-all ${
                       isP1
                         ? "bg-rose-600/80 border-rose-400 text-white shadow-glow"
                         : isP2
                         ? "bg-amber-500/80 border-amber-300 text-black shadow-glow"
                         : isMyTttTurn
-                        ? "bg-wine-900/60 border-rose-500/30 hover:bg-rose-950/80 cursor-pointer"
+                        ? "bg-wine-900/60 border-rose-500/30 hover:bg-rose-950/80 cursor-pointer active:scale-95"
                         : "bg-wine-950/60 border-rose-900/20 opacity-70 cursor-not-allowed"
                     }`}
                   >
@@ -411,7 +441,7 @@ export default function CasualGamesPage() {
           </div>
         )}
 
-        {/* 2. CONNECT FOUR */}
+        {/* 2. CONNECT FOUR (Flat 42-Element Matrix) */}
         {activeTab === "connectfour" && (
           <div className="moi-card p-8 text-center space-y-6 max-w-xl mx-auto bg-wine-950/90 border border-rose-500/30 shadow-2xl">
             <div className="flex items-center justify-between text-xs font-bold text-rose-300 border-b border-rose-900/40 pb-3">
@@ -449,15 +479,15 @@ export default function CasualGamesPage() {
                   key={colIdx}
                   type="button"
                   onClick={() => handleC4ColumnClick(colIdx)}
-                  disabled={!isMyC4Turn || Boolean(c4State?.winner)}
                   className={`flex flex-col space-y-2 p-1.5 rounded-2xl transition-all ${
                     isMyC4Turn && !c4State?.winner
-                      ? "hover:bg-rose-500/20 cursor-pointer"
+                      ? "hover:bg-rose-500/20 cursor-pointer active:scale-95"
                       : "cursor-not-allowed opacity-90"
                   }`}
                 >
                   {Array.from({ length: 6 }).map((_, rowIdx) => {
-                    const cellOwner = c4State?.grid?.[rowIdx]?.[colIdx];
+                    const idx = rowIdx * 7 + colIdx;
+                    const cellOwner = Array.isArray(c4State?.grid) ? c4State.grid[idx] : null;
                     const isP1 = cellOwner === player1Uid;
                     const isP2 = cellOwner === player2Uid;
 

@@ -43,7 +43,7 @@ export interface TicTacToeState {
 }
 
 export interface ConnectFourState {
-  grid: (string | null)[][]; // 6 rows x 7 cols
+  grid: any; // 42 flat cells or 6x7 2D array
   currentTurnUid: string;
   winner: string | null;
   scores: Record<string, number>;
