@@ -129,7 +129,7 @@ export default function NoticeBoardCanvas() {
     if (!coupleId) return;
 
     const legacyDocRef = doc(db, "couples", coupleId, "noticeBoard", "current");
-    const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+    const itemsCollRef = collection(db, "couples", coupleId, "noticeBoardItems");
 
     getDoc(legacyDocRef).then(async (snap) => {
       if (snap.exists()) {
@@ -167,11 +167,11 @@ export default function NoticeBoardCanvas() {
     }).catch((err) => console.warn("Legacy migration notice:", err));
   }, [coupleId, myName]);
 
-  // 2. Real-time Subscription to items subcollection with safe limit & error callback
+  // 2. Real-time Subscription to noticeBoardItems subcollection (3 segments: couples/{coupleId}/noticeBoardItems)
   useEffect(() => {
     if (!coupleId) return;
 
-    const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+    const itemsCollRef = collection(db, "couples", coupleId, "noticeBoardItems");
     const q = query(itemsCollRef, limit(200));
 
     const unsubscribe = onSnapshot(
@@ -205,7 +205,7 @@ export default function NoticeBoardCanvas() {
     if (!coupleId) return;
 
     try {
-      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoardItems");
       const countSnap = await getCountFromServer(itemsCollRef);
       const totalCount = countSnap.data().count;
 
@@ -266,7 +266,7 @@ export default function NoticeBoardCanvas() {
       setNoteInputText("");
     } else if (activeTool === "emoji") {
       if (!coupleId) return;
-      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoardItems");
 
       addDoc(itemsCollRef, {
         type: "emoji",
@@ -313,7 +313,7 @@ export default function NoticeBoardCanvas() {
     setIsDrawing(false);
 
     if (currentStrokePoints.current.length > 0 && coupleId) {
-      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoardItems");
 
       addDoc(itemsCollRef, {
         type: "stroke",
@@ -332,7 +332,7 @@ export default function NoticeBoardCanvas() {
     e.preventDefault();
     if (!textModalPos || !noteInputText.trim() || !coupleId) return;
 
-    const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+    const itemsCollRef = collection(db, "couples", coupleId, "noticeBoardItems");
 
     addDoc(itemsCollRef, {
       type: "text",
@@ -354,7 +354,7 @@ export default function NoticeBoardCanvas() {
     setIsClearing(true);
 
     try {
-      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoard", "items");
+      const itemsCollRef = collection(db, "couples", coupleId, "noticeBoardItems");
       const allDocsSnap = await getDocs(itemsCollRef);
       const docSnaps = allDocsSnap.docs;
 

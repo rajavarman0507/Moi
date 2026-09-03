@@ -63,8 +63,8 @@ service cloud.firestore {
 
       allow update, delete: if isAuthenticated() && isPartnerInCouple(resource.data);
 
-      // Explicit rules for Notice Board subcollection items
-      match /noticeBoard/{allSubcollections=**} {
+      // Explicit rules for Notice Board subcollection items (3-segment path: couples/{coupleId}/noticeBoardItems/{itemId})
+      match /noticeBoardItems/{itemId} {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
       }
 
