@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import {
   Pencil,
+  Eraser,
   Type,
   Smile,
   RotateCcw,
@@ -36,7 +37,7 @@ interface StrokePoint {
 
 export interface NoticeElement {
   id: string;
-  type: "stroke" | "text" | "emoji";
+  type: "stroke" | "eraser" | "text" | "emoji";
   points?: StrokePoint[];
   color?: string;
   width?: number;
@@ -51,7 +52,7 @@ export interface NoticeElement {
 const COLORS = ["#FB7185", "#FDE047", "#60A5FA", "#34D399", "#A78BFA", "#FFFFFF", "#000000"];
 const EMOJIS = ["❤️", "🥰", "✨", "🌹", "💌", "💍", "💋", "☕", "🎉", "🐥"];
 
-type ActiveTool = "draw" | "text" | "emoji";
+type ActiveTool = "draw" | "erase" | "text" | "emoji";
 
 export default function NoticeBoardCanvas() {
   const { couple, userProfile } = useAuth();
@@ -61,6 +62,7 @@ export default function NoticeBoardCanvas() {
   const [selectedColor, setSelectedColor] = useState<string>("#FB7185");
   const [selectedEmoji, setSelectedEmoji] = useState<string>("❤️");
   const [lineWidth, setLineWidth] = useState<number>(5);
+  const [eraserWidth, setEraserWidth] = useState<number>(20);
 
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [elements, setElements] = useState<NoticeElement[]>([]);
@@ -87,17 +89,21 @@ export default function NoticeBoardCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     els.forEach((el) => {
-      if (el.type === "stroke" && el.points && el.points.length > 0) {
-        ctx.strokeStyle = el.color || "#FB7185";
-        ctx.lineWidth = el.width || 5;
+      if ((el.type === "stroke" || el.type === "eraser") && el.points && el.points.length > 0) {
+        const isEraser = el.type === "eraser";
+        const strokeColor = isEraser ? "#180611" : (el.color || "#FB7185");
+        const strokeSize = isEraser ? (el.width || 20) : (el.width || 5);
+
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = strokeSize;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
 
         if (el.points.length === 1) {
           const pt = el.points[0];
           ctx.beginPath();
-          ctx.arc(pt.x * canvas.width, pt.y * canvas.height, (el.width || 5) / 2, 0, Math.PI * 2);
-          ctx.fillStyle = el.color || "#FB7185";
+          ctx.arc(pt.x * canvas.width, pt.y * canvas.height, strokeSize / 2, 0, Math.PI * 2);
+          ctx.fillStyle = strokeColor;
           ctx.fill();
         } else {
           ctx.beginPath();
@@ -253,7 +259,7 @@ export default function NoticeBoardCanvas() {
     const coords = getNormCoords(clientX, clientY);
     if (!coords) return;
 
-    if (activeTool === "draw") {
+    if (activeTool === "draw" || activeTool === "erase") {
       setIsDrawing(true);
       currentStrokePoints.current = [{ x: coords.normX, y: coords.normY }];
     } else if (activeTool === "text") {
@@ -280,14 +286,14 @@ export default function NoticeBoardCanvas() {
   };
 
   const handleMove = (clientX: number, clientY: number) => {
-    if (activeTool !== "draw" || !isDrawing) return;
+    if ((activeTool !== "draw" && activeTool !== "erase") || !isDrawing) return;
 
     const coords = getNormCoords(clientX, clientY);
     if (!coords) return;
 
     currentStrokePoints.current.push({ x: coords.normX, y: coords.normY });
 
-    // Render temporary stroke live
+    // Render temporary stroke / eraser live
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
@@ -295,12 +301,14 @@ export default function NoticeBoardCanvas() {
         const pts = currentStrokePoints.current;
         const p1 = pts[pts.length - 2];
         const p2 = pts[pts.length - 1];
+        const isEraser = activeTool === "erase";
+        const strokeSize = isEraser ? eraserWidth : lineWidth;
 
         ctx.beginPath();
         ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
         ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
-        ctx.strokeStyle = selectedColor;
-        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = isEraser ? "#180611" : selectedColor;
+        ctx.lineWidth = strokeSize;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.stroke();
@@ -309,17 +317,18 @@ export default function NoticeBoardCanvas() {
   };
 
   const handleEnd = () => {
-    if (activeTool !== "draw" || !isDrawing) return;
+    if ((activeTool !== "draw" && activeTool !== "erase") || !isDrawing) return;
     setIsDrawing(false);
 
     if (currentStrokePoints.current.length > 0 && coupleId) {
       const itemsCollRef = collection(db, "couples", coupleId, "noticeBoardItems");
+      const isEraser = activeTool === "erase";
 
       addDoc(itemsCollRef, {
-        type: "stroke",
+        type: isEraser ? "eraser" : "stroke",
         points: currentStrokePoints.current,
-        color: selectedColor,
-        width: lineWidth,
+        color: isEraser ? "#180611" : selectedColor,
+        width: isEraser ? eraserWidth : lineWidth,
         authorName: myName,
         createdAt: serverTimestamp(),
       }).then(() => checkAndPruneOldItems()).catch((err) => console.error("Error adding stroke item:", err));
@@ -415,7 +424,7 @@ export default function NoticeBoardCanvas() {
           }}
           onTouchEnd={handleEnd}
           className={`w-full h-full ${
-            activeTool === "draw"
+            activeTool === "draw" || activeTool === "erase"
               ? "cursor-crosshair"
               : activeTool === "text"
               ? "cursor-text"
@@ -479,6 +488,18 @@ export default function NoticeBoardCanvas() {
           </button>
 
           <button
+            onClick={() => setActiveTool("erase")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all ${
+              activeTool === "erase"
+                ? "bg-rose-600 text-white shadow-glow"
+                : "text-rose-300/70 hover:text-white"
+            }`}
+          >
+            <Eraser className="w-3.5 h-3.5" />
+            <span>Erase</span>
+          </button>
+
+          <button
             onClick={() => setActiveTool("text")}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all ${
               activeTool === "text"
@@ -504,19 +525,21 @@ export default function NoticeBoardCanvas() {
         </div>
 
         {/* Color Options */}
-        <div className="flex items-center space-x-2">
-          <Palette className="w-4 h-4 text-rose-300" />
-          {COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => setSelectedColor(c)}
-              className={`w-6 h-6 rounded-full border-2 border-white/20 transition-transform ${
-                selectedColor === c ? "scale-125 border-amber-300 shadow-glow" : ""
-              }`}
-              style={{ backgroundColor: c }}
-            />
-          ))}
-        </div>
+        {activeTool !== "erase" && (
+          <div className="flex items-center space-x-2">
+            <Palette className="w-4 h-4 text-rose-300" />
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                onClick={() => setSelectedColor(c)}
+                className={`w-6 h-6 rounded-full border-2 border-white/20 transition-transform ${
+                  selectedColor === c ? "scale-125 border-amber-300 shadow-glow" : ""
+                }`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Dynamic Tool Sub-controls */}
         {activeTool === "draw" && (
@@ -529,6 +552,20 @@ export default function NoticeBoardCanvas() {
               value={lineWidth}
               onChange={(e) => setLineWidth(Number(e.target.value))}
               className="w-20 accent-rose-500 cursor-pointer"
+            />
+          </div>
+        )}
+
+        {activeTool === "erase" && (
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-rose-300 font-semibold">Eraser Size:</span>
+            <input
+              type="range"
+              min={8}
+              max={40}
+              value={eraserWidth}
+              onChange={(e) => setEraserWidth(Number(e.target.value))}
+              className="w-24 accent-rose-500 cursor-pointer"
             />
           </div>
         )}
