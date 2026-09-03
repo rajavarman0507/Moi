@@ -17,31 +17,39 @@ export default function TruthOrDarePage() {
   const myName = userProfile?.displayName || userProfile?.email?.split("@")[0] || "You";
   const partnerName = partnerProfile?.displayName || partnerProfile?.email?.split("@")[0] || "Partner";
 
+  const partnerUid = couple?.userIds.find((id) => id !== user?.uid);
+
   useEffect(() => {
     if (!couple?.id || !user?.uid) return;
 
+    const sortedUids = couple?.userIds ? [...couple.userIds].sort() : [];
+    const player1Uid = sortedUids[0] || user.uid;
+
     const gameDocRef = doc(db, "couples", couple.id, "games", "truthOrDare");
-    const unsubscribe = onSnapshot(gameDocRef, (snap) => {
-      if (snap.exists()) {
-        setGameState(snap.data() as TruthOrDareState);
-      } else {
-        const initialState: TruthOrDareState = {
-          currentTurnUid: user.uid,
-          choice: null,
-          cardText: null,
-          cardIndex: 0,
-          completedTurns: 0,
-        };
-        setDoc(gameDocRef, { ...initialState, updatedAt: serverTimestamp() });
-        setGameState(initialState);
-      }
-    });
+    const unsubscribe = onSnapshot(
+      gameDocRef,
+      (snap) => {
+        if (snap.exists()) {
+          setGameState(snap.data() as TruthOrDareState);
+        } else {
+          const initialState: TruthOrDareState = {
+            currentTurnUid: player1Uid,
+            choice: null,
+            cardText: null,
+            cardIndex: 0,
+            completedTurns: 0,
+          };
+          setDoc(gameDocRef, { ...initialState, updatedAt: serverTimestamp() }).catch((err) => console.error(err));
+          setGameState(initialState);
+        }
+      },
+      (err) => console.error("TruthOrDare onSnapshot error:", err)
+    );
 
     return () => unsubscribe();
   }, [couple, user]);
 
   const isMyTurn = Boolean(user?.uid && gameState?.currentTurnUid === user.uid);
-  const partnerUid = couple?.userIds.find((id) => id !== user?.uid);
   const activeTurnName = isMyTurn ? myName : partnerName;
 
   const handleChoose = async (choice: "truth" | "dare") => {
@@ -105,9 +113,13 @@ export default function TruthOrDarePage() {
               <Flame className="w-4 h-4 text-amber-300 animate-pulse" />
               <span>Current Turn</span>
             </span>
-            <h2 className="text-2xl md:text-3xl font-extrabold text-white">
-              {isMyTurn ? "It's Your Turn! ♥" : `It's ${partnerName}'s Turn`}
-            </h2>
+            <div className={`inline-flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-extrabold ${
+              isMyTurn
+                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-glow animate-pulse"
+                : "bg-rose-500/20 text-rose-300 border border-rose-400/30"
+            }`}>
+              <span>{isMyTurn ? "It's Your Turn! 🎯" : `Waiting for ${partnerName}...`}</span>
+            </div>
           </div>
 
           {/* Choice Step */}

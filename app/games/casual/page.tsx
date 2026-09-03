@@ -34,79 +34,99 @@ export default function CasualGamesPage() {
   const partnerName = partnerProfile?.displayName || partnerProfile?.email?.split("@")[0] || "Partner";
   const partnerUid = couple?.userIds.find((id) => id !== user?.uid);
 
+  // Deterministic Player 1 & Player 2 sorting across both clients
+  const sortedUids = couple?.userIds ? [...couple.userIds].sort() : [];
+  const player1Uid = sortedUids[0] || user?.uid || "";
+  const player2Uid = sortedUids[1] || partnerUid || "";
+
+  const player1Name = user?.uid === player1Uid ? myName : partnerName;
+  const player2Name = user?.uid === player2Uid ? myName : partnerName;
+
   // Subscribe to Tic Tac Toe State
   useEffect(() => {
-    if (!couple?.id || !user?.uid) return;
+    if (!couple?.id || !user?.uid || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "ticTacToe");
-    return onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        setTttState(snap.data() as TicTacToeState);
-      } else {
-        const init: TicTacToeState = {
-          board: Array(9).fill(null),
-          currentTurnUid: user.uid,
-          winner: null,
-          scores: { [user.uid]: 0, ...(partnerUid ? { [partnerUid]: 0 } : {}) },
-        };
-        setDoc(ref, { ...init, updatedAt: serverTimestamp() });
-        setTttState(init);
-      }
-    });
-  }, [couple, user, partnerUid]);
+    return onSnapshot(
+      ref,
+      (snap) => {
+        if (snap.exists()) {
+          setTttState(snap.data() as TicTacToeState);
+        } else {
+          const init: TicTacToeState = {
+            board: Array(9).fill(null),
+            currentTurnUid: player1Uid,
+            winner: null,
+            scores: { [player1Uid]: 0, [player2Uid]: 0 },
+          };
+          setDoc(ref, { ...init, updatedAt: serverTimestamp() }).catch((err) => console.error(err));
+          setTttState(init);
+        }
+      },
+      (err) => console.error("TicTacToe onSnapshot error:", err)
+    );
+  }, [couple, user, player1Uid, player2Uid]);
 
   // Subscribe to Connect Four State
   useEffect(() => {
-    if (!couple?.id || !user?.uid) return;
+    if (!couple?.id || !user?.uid || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "connectFour");
-    return onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        setC4State(snap.data() as ConnectFourState);
-      } else {
-        const emptyGrid = Array.from({ length: 6 }, () => Array(7).fill(null));
-        const init: ConnectFourState = {
-          grid: emptyGrid,
-          currentTurnUid: user.uid,
-          winner: null,
-          scores: { [user.uid]: 0, ...(partnerUid ? { [partnerUid]: 0 } : {}) },
-        };
-        setDoc(ref, { ...init, updatedAt: serverTimestamp() });
-        setC4State(init);
-      }
-    });
-  }, [couple, user, partnerUid]);
+    return onSnapshot(
+      ref,
+      (snap) => {
+        if (snap.exists()) {
+          setC4State(snap.data() as ConnectFourState);
+        } else {
+          const emptyGrid = Array.from({ length: 6 }, () => Array(7).fill(null));
+          const init: ConnectFourState = {
+            grid: emptyGrid,
+            currentTurnUid: player1Uid,
+            winner: null,
+            scores: { [player1Uid]: 0, [player2Uid]: 0 },
+          };
+          setDoc(ref, { ...init, updatedAt: serverTimestamp() }).catch((err) => console.error(err));
+          setC4State(init);
+        }
+      },
+      (err) => console.error("ConnectFour onSnapshot error:", err)
+    );
+  }, [couple, user, player1Uid, player2Uid]);
 
   // Subscribe to Snakes & Ladders State
   useEffect(() => {
-    if (!couple?.id || !user?.uid || !partnerUid) return;
+    if (!couple?.id || !user?.uid || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "snakesLadders");
-    return onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        setSnakesState(snap.data() as SnakesLaddersState);
-      } else {
-        const init: SnakesLaddersState = {
-          positions: { [user.uid]: 1, [partnerUid]: 1 },
-          currentTurnUid: user.uid,
-          lastDiceRoll: null,
-          winner: null,
-        };
-        setDoc(ref, { ...init, updatedAt: serverTimestamp() });
-        setSnakesState(init);
-      }
-    });
-  }, [couple, user, partnerUid]);
+    return onSnapshot(
+      ref,
+      (snap) => {
+        if (snap.exists()) {
+          setSnakesState(snap.data() as SnakesLaddersState);
+        } else {
+          const init: SnakesLaddersState = {
+            positions: { [player1Uid]: 1, [player2Uid]: 1 },
+            currentTurnUid: player1Uid,
+            lastDiceRoll: null,
+            winner: null,
+          };
+          setDoc(ref, { ...init, updatedAt: serverTimestamp() }).catch((err) => console.error(err));
+          setSnakesState(init);
+        }
+      },
+      (err) => console.error("SnakesLadders onSnapshot error:", err)
+    );
+  }, [couple, user, player1Uid, player2Uid]);
 
   // --- TIC TAC TOE LOGIC ---
   const handleTttCellClick = async (cellIdx: number) => {
-    if (!couple?.id || !user?.uid || !partnerUid || !tttState || tttState.winner || tttState.board[cellIdx]) return;
+    if (!couple?.id || !user?.uid || !player1Uid || !player2Uid || !tttState || tttState.winner || tttState.board[cellIdx]) return;
     if (tttState.currentTurnUid !== user.uid) return;
 
     const newBoard = [...tttState.board];
     newBoard[cellIdx] = user.uid;
 
-    const winner = checkTttWinner(newBoard, user.uid, partnerUid);
-    const nextTurn = winner ? tttState.currentTurnUid : partnerUid;
+    const winner = checkTttWinner(newBoard, player1Uid, player2Uid);
+    const nextTurn = winner ? tttState.currentTurnUid : (user.uid === player1Uid ? player2Uid : player1Uid);
 
-    const newScores = { ...tttState.scores };
+    const newScores = { ...(tttState.scores || {}) };
     if (winner && winner !== "draw") {
       newScores[winner] = (newScores[winner] || 0) + 1;
     }
@@ -121,7 +141,7 @@ export default function CasualGamesPage() {
     });
   };
 
-  const checkTttWinner = (board: (string | null)[], myUid: string, partnerUid: string): string | null => {
+  const checkTttWinner = (board: (string | null)[], p1Uid: string, p2Uid: string): string | null => {
     const lines = [
       [0, 1, 2], [3, 4, 5], [6, 7, 8],
       [0, 3, 6], [1, 4, 7], [2, 5, 8],
@@ -137,20 +157,20 @@ export default function CasualGamesPage() {
   };
 
   const handleResetTtt = async () => {
-    if (!couple?.id || !user?.uid || !partnerUid || !tttState) return;
+    if (!couple?.id || !player1Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "ticTacToe");
     await setDoc(ref, {
       board: Array(9).fill(null),
-      currentTurnUid: user.uid,
+      currentTurnUid: player1Uid,
       winner: null,
-      scores: tttState.scores,
+      scores: tttState?.scores || { [player1Uid]: 0, [player2Uid]: 0 },
       updatedAt: serverTimestamp(),
     });
   };
 
   // --- CONNECT FOUR LOGIC ---
   const handleC4ColumnClick = async (colIdx: number) => {
-    if (!couple?.id || !user?.uid || !partnerUid || !c4State || c4State.winner) return;
+    if (!couple?.id || !user?.uid || !player1Uid || !player2Uid || !c4State || c4State.winner) return;
     if (c4State.currentTurnUid !== user.uid) return;
 
     // Find lowest empty row in column
@@ -167,9 +187,9 @@ export default function CasualGamesPage() {
     newGrid[targetRow][colIdx] = user.uid;
 
     const winner = checkC4Winner(newGrid, user.uid);
-    const nextTurn = winner ? c4State.currentTurnUid : partnerUid;
+    const nextTurn = winner ? c4State.currentTurnUid : (user.uid === player1Uid ? player2Uid : player1Uid);
 
-    const newScores = { ...c4State.scores };
+    const newScores = { ...(c4State.scores || {}) };
     if (winner && winner !== "draw") {
       newScores[winner] = (newScores[winner] || 0) + 1;
     }
@@ -185,7 +205,6 @@ export default function CasualGamesPage() {
   };
 
   const checkC4Winner = (grid: (string | null)[][], uid: string): string | null => {
-    // Horizontal, Vertical, Diagonal checks
     for (let r = 0; r < 6; r++) {
       for (let c = 0; c < 7; c++) {
         const val = grid[r][c];
@@ -200,20 +219,20 @@ export default function CasualGamesPage() {
   };
 
   const handleResetC4 = async () => {
-    if (!couple?.id || !user?.uid || !c4State) return;
+    if (!couple?.id || !player1Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "connectFour");
     await setDoc(ref, {
       grid: Array.from({ length: 6 }, () => Array(7).fill(null)),
-      currentTurnUid: user.uid,
+      currentTurnUid: player1Uid,
       winner: null,
-      scores: c4State.scores,
+      scores: c4State?.scores || { [player1Uid]: 0, [player2Uid]: 0 },
       updatedAt: serverTimestamp(),
     });
   };
 
   // --- SNAKES & LADDERS LOGIC ---
   const handleRollDice = async () => {
-    if (!couple?.id || !user?.uid || !partnerUid || !snakesState || snakesState.winner) return;
+    if (!couple?.id || !user?.uid || !player1Uid || !player2Uid || !snakesState || snakesState.winner) return;
     if (snakesState.currentTurnUid !== user.uid) return;
 
     const roll = Math.floor(Math.random() * 6) + 1;
@@ -225,7 +244,7 @@ export default function CasualGamesPage() {
     }
 
     const winner = newPos === 100 ? user.uid : null;
-    const nextTurn = winner ? snakesState.currentTurnUid : partnerUid;
+    const nextTurn = winner ? snakesState.currentTurnUid : (user.uid === player1Uid ? player2Uid : player1Uid);
 
     const ref = doc(db, "couples", couple.id, "games", "snakesLadders");
     await setDoc(ref, {
@@ -238,11 +257,11 @@ export default function CasualGamesPage() {
   };
 
   const handleResetSnakes = async () => {
-    if (!couple?.id || !user?.uid || !partnerUid) return;
+    if (!couple?.id || !player1Uid || !player2Uid) return;
     const ref = doc(db, "couples", couple.id, "games", "snakesLadders");
     await setDoc(ref, {
-      positions: { [user.uid]: 1, [partnerUid]: 1 },
-      currentTurnUid: user.uid,
+      positions: { [player1Uid]: 1, [player2Uid]: 1 },
+      currentTurnUid: player1Uid,
       lastDiceRoll: null,
       winner: null,
       updatedAt: serverTimestamp(),
@@ -256,6 +275,16 @@ export default function CasualGamesPage() {
       </div>
     );
   }
+
+  // Turn status indicators
+  const isMyTttTurn = tttState?.currentTurnUid === user.uid;
+  const tttTurnName = tttState?.currentTurnUid === player1Uid ? player1Name : player2Name;
+
+  const isMyC4Turn = c4State?.currentTurnUid === user.uid;
+  const c4TurnName = c4State?.currentTurnUid === player1Uid ? player1Name : player2Name;
+
+  const isMySnakesTurn = snakesState?.currentTurnUid === user.uid;
+  const snakesTurnName = snakesState?.currentTurnUid === player1Uid ? player1Name : player2Name;
 
   return (
     <WaitingForPartner>
@@ -310,69 +339,113 @@ export default function CasualGamesPage() {
 
         {/* 1. TIC TAC TOE */}
         {activeTab === "tictactoe" && (
-          <div className="moi-card p-8 text-center space-y-6 max-w-lg mx-auto bg-wine-950/90 border border-rose-500/30">
+          <div className="moi-card p-8 text-center space-y-6 max-w-lg mx-auto bg-wine-950/90 border border-rose-500/30 shadow-2xl">
             <div className="flex items-center justify-between text-xs font-bold text-rose-300 border-b border-rose-900/40 pb-3">
-              <span>{myName} (♥): {tttState?.scores?.[user.uid] || 0}</span>
-              <span>Turn: {tttState?.currentTurnUid === user.uid ? myName : partnerName}</span>
-              <span>{partnerName} (★): {partnerUid ? tttState?.scores?.[partnerUid] || 0 : 0}</span>
+              <span>{player1Name} (♥): {tttState?.scores?.[player1Uid] || 0}</span>
+              
+              <div className={`px-3 py-1 rounded-full text-xs font-extrabold flex items-center space-x-1.5 ${
+                isMyTttTurn
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-glow"
+                  : "bg-rose-500/20 text-rose-300 border border-rose-400/30"
+              }`}>
+                <span>{isMyTttTurn ? "Your Turn! 🎯" : `${tttTurnName}'s Turn`}</span>
+              </div>
+
+              <span>{player2Name} (★): {tttState?.scores?.[player2Uid] || 0}</span>
             </div>
 
             {tttState?.winner ? (
               <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-extrabold text-sm space-y-2">
-                <p>{tttState.winner === "draw" ? "It's a Draw!" : `${tttState.winner === user.uid ? myName : partnerName} Wins! 🎉`}</p>
-                <button onClick={handleResetTtt} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs">Play Again</button>
+                <p>{tttState.winner === "draw" ? "It's a Draw!" : `${tttState.winner === player1Uid ? player1Name : player2Name} Wins! 🎉`}</p>
+                <button onClick={handleResetTtt} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-glow">Play Again</button>
               </div>
             ) : null}
 
             <div className="grid grid-cols-3 gap-3 w-64 h-64 mx-auto">
-              {tttState?.board.map((cell, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleTttCellClick(idx)}
-                  className="w-full h-full bg-wine-900/60 border border-rose-500/30 rounded-2xl flex items-center justify-center text-3xl font-bold hover:bg-rose-950/80 transition-colors"
-                >
-                  {cell === user.uid ? "♥" : cell ? "★" : ""}
-                </button>
-              ))}
+              {tttState?.board.map((cell, idx) => {
+                const isP1 = cell === player1Uid;
+                const isP2 = cell === player2Uid;
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => handleTttCellClick(idx)}
+                    disabled={!isMyTttTurn || Boolean(cell) || Boolean(tttState?.winner)}
+                    className={`w-full h-full border rounded-2xl flex items-center justify-center text-3xl font-bold transition-all ${
+                      isP1
+                        ? "bg-rose-600/80 border-rose-400 text-white shadow-glow"
+                        : isP2
+                        ? "bg-amber-500/80 border-amber-300 text-black shadow-glow"
+                        : "bg-wine-900/60 border-rose-500/30 hover:bg-rose-950/80"
+                    }`}
+                  >
+                    {isP1 ? "♥" : isP2 ? "★" : ""}
+                  </button>
+                );
+              })}
             </div>
 
-            <button onClick={handleResetTtt} className="text-xs text-rose-400 underline font-semibold">Reset Game</button>
+            <button onClick={handleResetTtt} className="text-xs text-rose-400 underline font-semibold hover:text-white transition-colors">Reset Game</button>
           </div>
         )}
 
         {/* 2. CONNECT FOUR */}
         {activeTab === "connectfour" && (
-          <div className="moi-card p-8 text-center space-y-6 max-w-xl mx-auto bg-wine-950/90 border border-rose-500/30">
+          <div className="moi-card p-8 text-center space-y-6 max-w-xl mx-auto bg-wine-950/90 border border-rose-500/30 shadow-2xl">
             <div className="flex items-center justify-between text-xs font-bold text-rose-300 border-b border-rose-900/40 pb-3">
-              <span>{myName} (🔴): {c4State?.scores?.[user.uid] || 0}</span>
-              <span>Turn: {c4State?.currentTurnUid === user.uid ? myName : partnerName}</span>
-              <span>{partnerName} (🟡): {partnerUid ? c4State?.scores?.[partnerUid] || 0 : 0}</span>
+              <span className="flex items-center space-x-1">
+                <span>{player1Name}</span>
+                <span className="text-rose-400 font-extrabold">(🔴):</span>
+                <span>{c4State?.scores?.[player1Uid] || 0}</span>
+              </span>
+
+              <div className={`px-3 py-1 rounded-full text-xs font-extrabold flex items-center space-x-1.5 ${
+                isMyC4Turn
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-glow animate-pulse"
+                  : "bg-rose-500/20 text-rose-300 border border-rose-400/30"
+              }`}>
+                <span>{isMyC4Turn ? "Your Turn! 🎯" : `${c4TurnName}'s Turn`}</span>
+              </div>
+
+              <span className="flex items-center space-x-1">
+                <span>{player2Name}</span>
+                <span className="text-amber-300 font-extrabold">(🟡):</span>
+                <span>{c4State?.scores?.[player2Uid] || 0}</span>
+              </span>
             </div>
 
             {c4State?.winner && (
               <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-extrabold text-sm space-y-2">
-                <p>{`${c4State.winner === user.uid ? myName : partnerName} Wins Connect Four! 🎉`}</p>
-                <button onClick={handleResetC4} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs">Play Again</button>
+                <p>{`${c4State.winner === player1Uid ? player1Name : player2Name} Wins Connect Four! 🎉`}</p>
+                <button onClick={handleResetC4} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-glow">Play Again</button>
               </div>
             )}
 
             <div className="grid grid-cols-7 gap-2 p-4 bg-wine-900/80 rounded-3xl border border-rose-500/30">
               {Array.from({ length: 7 }).map((_, colIdx) => (
-                <div key={colIdx} onClick={() => handleC4ColumnClick(colIdx)} className="cursor-pointer space-y-2 hover:opacity-80">
+                <div
+                  key={colIdx}
+                  onClick={() => handleC4ColumnClick(colIdx)}
+                  className={`space-y-2 transition-opacity ${
+                    isMyC4Turn && !c4State?.winner ? "cursor-pointer hover:opacity-80" : "cursor-not-allowed opacity-90"
+                  }`}
+                >
                   {Array.from({ length: 6 }).map((_, rowIdx) => {
                     const cellOwner = c4State?.grid[rowIdx][colIdx];
+                    const isP1 = cellOwner === player1Uid;
+                    const isP2 = cellOwner === player2Uid;
+
                     return (
                       <div
                         key={rowIdx}
-                        className={`w-9 h-9 md:w-11 md:h-11 rounded-full border border-rose-950 flex items-center justify-center text-lg ${
-                          cellOwner === user.uid
-                            ? "bg-rose-500 shadow-glow"
-                            : cellOwner
-                            ? "bg-amber-400 shadow-glow"
+                        className={`w-9 h-9 md:w-11 md:h-11 rounded-full border border-rose-950 flex items-center justify-center text-base transition-all ${
+                          isP1
+                            ? "bg-rose-500 shadow-glow text-white font-extrabold"
+                            : isP2
+                            ? "bg-amber-400 shadow-glow text-black font-extrabold"
                             : "bg-wine-950/80"
                         }`}
                       >
-                        {cellOwner === user.uid ? "♥" : cellOwner ? "★" : ""}
+                        {isP1 ? "🔴" : isP2 ? "🟡" : ""}
                       </div>
                     );
                   })}
@@ -380,23 +453,31 @@ export default function CasualGamesPage() {
               ))}
             </div>
 
-            <button onClick={handleResetC4} className="text-xs text-rose-400 underline font-semibold">Reset Board</button>
+            <button onClick={handleResetC4} className="text-xs text-rose-400 underline font-semibold hover:text-white transition-colors">Reset Board</button>
           </div>
         )}
 
         {/* 3. SNAKES & LADDERS */}
         {activeTab === "snakesladders" && (
-          <div className="moi-card p-8 text-center space-y-6 bg-wine-950/90 border border-rose-500/30">
+          <div className="moi-card p-8 text-center space-y-6 bg-wine-950/90 border border-rose-500/30 shadow-2xl">
             <div className="flex items-center justify-between text-xs font-bold text-rose-300 border-b border-rose-900/40 pb-3">
-              <span>{myName} Pos: {snakesState?.positions?.[user.uid] || 1}</span>
-              <span>Turn: {snakesState?.currentTurnUid === user.uid ? myName : partnerName}</span>
-              <span>{partnerName} Pos: {partnerUid ? snakesState?.positions?.[partnerUid] || 1 : 1}</span>
+              <span>{player1Name} (🔴) Pos: {snakesState?.positions?.[player1Uid] || 1}</span>
+
+              <div className={`px-3 py-1 rounded-full text-xs font-extrabold flex items-center space-x-1.5 ${
+                isMySnakesTurn
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-glow"
+                  : "bg-rose-500/20 text-rose-300 border border-rose-400/30"
+              }`}>
+                <span>{isMySnakesTurn ? "Your Turn! 🎯" : `${snakesTurnName}'s Turn`}</span>
+              </div>
+
+              <span>{player2Name} (🟡) Pos: {snakesState?.positions?.[player2Uid] || 1}</span>
             </div>
 
             {snakesState?.winner && (
               <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-extrabold text-sm space-y-2">
-                <p>{`${snakesState.winner === user.uid ? myName : partnerName} Reached 100 First & Wins! 🎉`}</p>
-                <button onClick={handleResetSnakes} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs">Play Again</button>
+                <p>{`${snakesState.winner === player1Uid ? player1Name : player2Name} Reached 100 First & Wins! 🎉`}</p>
+                <button onClick={handleResetSnakes} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-glow">Play Again</button>
               </div>
             )}
 
@@ -410,11 +491,11 @@ export default function CasualGamesPage() {
 
               <button
                 onClick={handleRollDice}
-                disabled={snakesState?.currentTurnUid !== user.uid || Boolean(snakesState?.winner)}
+                disabled={!isMySnakesTurn || Boolean(snakesState?.winner)}
                 className="moi-button-primary inline-flex items-center space-x-2 py-3 px-6 text-xs font-bold disabled:opacity-50"
               >
                 <Dices className="w-4 h-4" />
-                <span>Roll Dice 🎲</span>
+                <span>{isMySnakesTurn ? "Roll Dice 🎲" : `Waiting for ${snakesTurnName}...`}</span>
               </button>
             </div>
 
@@ -422,34 +503,34 @@ export default function CasualGamesPage() {
             <div className="grid grid-cols-10 gap-1 p-3 bg-wine-900/60 rounded-2xl border border-rose-500/20 text-[10px] font-mono">
               {Array.from({ length: 100 }).map((_, idx) => {
                 const cellNum = 100 - idx;
-                const isMyPos = snakesState?.positions?.[user.uid] === cellNum;
-                const isPartnerPos = partnerUid && snakesState?.positions?.[partnerUid] === cellNum;
+                const isP1Pos = snakesState?.positions?.[player1Uid] === cellNum;
+                const isP2Pos = snakesState?.positions?.[player2Uid] === cellNum;
                 const isSnakeOrLadder = SNAKES_LADDERS_MAP[cellNum];
 
                 return (
                   <div
                     key={cellNum}
                     className={`h-8 rounded flex items-center justify-center relative font-bold ${
-                      isMyPos && isPartnerPos
-                        ? "bg-amber-400 text-black"
-                        : isMyPos
-                        ? "bg-rose-500 text-white"
-                        : isPartnerPos
-                        ? "bg-amber-300 text-black"
+                      isP1Pos && isP2Pos
+                        ? "bg-amber-400 text-black shadow-glow"
+                        : isP1Pos
+                        ? "bg-rose-500 text-white shadow-glow"
+                        : isP2Pos
+                        ? "bg-amber-300 text-black shadow-glow"
                         : isSnakeOrLadder
                         ? "bg-wine-800 text-amber-200"
                         : "bg-wine-950/60 text-rose-300/60"
                     }`}
                   >
                     <span>{cellNum}</span>
-                    {isMyPos && <span className="absolute -top-1 left-0 text-[9px]">♥</span>}
-                    {isPartnerPos && <span className="absolute -top-1 right-0 text-[9px]">★</span>}
+                    {isP1Pos && <span className="absolute -top-1 left-0 text-[9px]">🔴</span>}
+                    {isP2Pos && <span className="absolute -top-1 right-0 text-[9px]">🟡</span>}
                   </div>
                 );
               })}
             </div>
 
-            <button onClick={handleResetSnakes} className="text-xs text-rose-400 underline font-semibold">Reset Game</button>
+            <button onClick={handleResetSnakes} className="text-xs text-rose-400 underline font-semibold hover:text-white transition-colors">Reset Game</button>
           </div>
         )}
       </div>
