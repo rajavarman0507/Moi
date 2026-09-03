@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function: Fetch couple document to verify partnership for storage paths
+    function isPartnerInCouple(coupleId) {
+      return isAuthenticated() && (request.auth.uid in firestore.get(/databases/(default)/documents/couples/$(coupleId)).data.userIds);
+    }
+
+    // Strict Cloud Storage Rules: ONLY the 2 paired users in a couple can read/write memory files!
+    match /couples/{coupleId}/{allPaths=**} {
+      allow read, write: if isPartnerInCouple(coupleId);
+    }
+  }
+}

@@ -41,7 +41,7 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // COUPLES COLLECTION & PRIVATE HUB SUBCOLLECTIONS
+    // COUPLES COLLECTION & PRIVATE HUB / LIVE LOCATION SUBCOLLECTIONS
     // Strict isolation: ONLY the 2 paired user IDs listed in userIds array can access!
     // =========================================================================
     match /couples/{coupleId} {
@@ -53,6 +53,16 @@ service cloud.firestore {
 
       allow update, delete: if isAuthenticated() && isPartnerInCouple(resource.data);
 
+      // Explicit rules for Private Hub subcollections (letters, memories, pinConfig)
+      match /privateHub/{document=**} {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+
+      // Explicit rules for Live Location sharing subcollection
+      match /liveLocation/{userId} {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+
       // Explicit rules for Answered Cards subcollection
       match /answeredCards/{cardId} {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
@@ -60,6 +70,21 @@ service cloud.firestore {
 
       // Explicit rules for Moods subcollection
       match /moods/{moodDocId} {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+
+      // Explicit rules for Notice Board subcollection
+      match /noticeBoard/{docId} {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+
+      // Explicit rules for Games subcollections
+      match /games/{gameType} {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+
+      // Explicit rules for Presence subcollection
+      match /presence/{userId} {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
       }
 
