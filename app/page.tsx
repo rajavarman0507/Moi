@@ -6,7 +6,8 @@ import { useAuth } from "@/context/AuthContext";
 import { getDailyPromptForDate, DailyPrompt } from "@/lib/dailyPrompt";
 import CandleMode from "@/components/CandleMode";
 import NoticeBoardCanvas from "@/components/NoticeBoardCanvas";
-import { Heart, Calendar, Gamepad2, Sparkles, Lock, Layers, ArrowRight, CheckCircle2 } from "lucide-react";
+import MomentsStrip from "@/components/MomentsStrip";
+import { Heart, Calendar, Gamepad2, Sparkles, Lock, Layers, ArrowRight, CheckCircle2, Palette } from "lucide-react";
 import Link from "next/link";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -50,7 +51,7 @@ export default function HomePage() {
   }, [utcToday, couple, user]);
 
   useEffect(() => {
-    if (couple?.togetherSince) {
+    if (couple?.togetherSince && couple.id) {
       const startDate = new Date(couple.togetherSince);
       const today = new Date();
 
@@ -70,6 +71,30 @@ export default function HomePage() {
       if (years > 0) breakdown += `${years} year${years > 1 ? "s" : ""} `;
       if (months > 0) breakdown += `${months} month${months > 1 ? "s" : ""}`;
       setMonthsYears(breakdown.trim());
+
+      // Idempotent Milestone Check & Creation (e.g., 100 days, 365 days / 1 year, 500 days)
+      const milestones = [
+        { days: 100, title: "100 Days Together Milestone! 🎉" },
+        { days: 365, title: "1 Year Anniversary Milestone! 💖" },
+        { days: 500, title: "500 Days Together Milestone! ✨" },
+        { days: 1000, title: "1,000 Days Together Milestone! 👑" },
+      ];
+
+      milestones.forEach((m) => {
+        if (diffDays >= m.days) {
+          const milestoneDocRef = doc(db, "couples", couple.id, "moments", `milestone_${m.days}`);
+          setDoc(
+            milestoneDocRef,
+            {
+              type: "milestone",
+              title: m.title,
+              authorName: "Together",
+              createdAt: serverTimestamp(),
+            },
+            { merge: true }
+          ).catch((err) => console.warn("Milestone write error:", err));
+        }
+      });
     }
   }, [couple]);
 
@@ -160,6 +185,9 @@ export default function HomePage() {
         <CandleMode />
       </div>
 
+      {/* Shared Moments Gallery Strip */}
+      <MomentsStrip />
+
       {/* Daily Couple Joy Prompt Section */}
       {dailyPrompt && (
         <div className="moi-card p-6 md:p-8 bg-gradient-to-r from-[#2F0B1E]/90 via-[#44112B]/90 to-[#230615]/90 border border-rose-500/40 relative overflow-hidden shadow-glow">
@@ -204,6 +232,18 @@ export default function HomePage() {
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Link href="/doodle" className="moi-card p-6 block hover:-translate-y-1 transition-all group border-amber-500/30">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-600 via-wine-700 to-amber-600 flex items-center justify-center text-white mb-4 shadow-glow group-hover:scale-110 transition-transform">
+              <Palette className="w-6 h-6 text-amber-200" />
+            </div>
+            <h3 className="text-base font-bold text-white group-hover:text-rose-300 transition-colors">Doodle Together</h3>
+            <p className="text-xs text-rose-200/60 mt-1">Draw freehand & send Instant Sketches.</p>
+            <span className="inline-flex items-center space-x-1 text-xs font-semibold text-rose-400 mt-4">
+              <span>Start Doodling</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </span>
+          </Link>
+
           <Link href="/games" className="moi-card p-6 block hover:-translate-y-1 transition-all group">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-600 to-wine-800 flex items-center justify-center text-white mb-4 shadow-glow group-hover:scale-110 transition-transform">
               <Gamepad2 className="w-6 h-6" />
@@ -222,18 +262,6 @@ export default function HomePage() {
             </div>
             <h3 className="text-base font-bold text-white group-hover:text-rose-300 transition-colors">Card Decks</h3>
             <p className="text-xs text-rose-200/60 mt-1">150+ deep conversation starters for two.</p>
-            <span className="inline-flex items-center space-x-1 text-xs font-semibold text-rose-400 mt-4">
-              <span>Explore</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </span>
-          </Link>
-
-          <Link href="/mood" className="moi-card p-6 block hover:-translate-y-1 transition-all group">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-600 to-wine-800 flex items-center justify-center text-white mb-4 shadow-glow group-hover:scale-110 transition-transform">
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-white group-hover:text-rose-300 transition-colors">Daily Mood</h3>
-            <p className="text-xs text-rose-200/60 mt-1">Share feelings & view 30-day trends.</p>
             <span className="inline-flex items-center space-x-1 text-xs font-semibold text-rose-400 mt-4">
               <span>Explore</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />

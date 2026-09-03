@@ -8,6 +8,7 @@ import {
   doc,
   onSnapshot,
   setDoc,
+  addDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -206,6 +207,15 @@ export default function PrivateHubPage() {
         date: newMemDate,
         note: newMemNote.trim(),
         photoUrl: uploadedPhotoUrl,
+        authorName: myName,
+        createdAt: serverTimestamp(),
+      });
+
+      // Write unencrypted safe placeholder card to Shared Moments Gallery WITHOUT photo or note
+      const momentsCollRef = collection(db, "couples", coupleId, "moments");
+      await addDoc(momentsCollRef, {
+        type: "memory_placeholder",
+        title: "New Memory Added to Private Hub 🔒",
         authorName: myName,
         createdAt: serverTimestamp(),
       });

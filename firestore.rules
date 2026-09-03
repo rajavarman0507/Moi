@@ -51,7 +51,7 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // COUPLES COLLECTION & PRIVATE HUB / LIVE LOCATION / NOTICE BOARD SUBCOLLECTIONS
+    // COUPLES COLLECTION & SUBCOLLECTIONS
     // Strict isolation: ONLY the 2 paired user IDs listed in userIds array can access!
     // =========================================================================
     match /couples/{coupleId} {
@@ -63,7 +63,22 @@ service cloud.firestore {
 
       allow update, delete: if isAuthenticated() && isPartnerInCouple(resource.data);
 
-      // Explicit rules for Notice Board subcollection items (3-segment path: couples/{coupleId}/noticeBoardItems/{itemId})
+      // Explicit rules for Notifications subcollection (recipient-bound & spoof-resistant)
+      match /notifications/{notifId} {
+        allow create: if isAuthenticated() 
+                      && isPartnerInCouple(getCoupleData(coupleId)) 
+                      && request.resource.data.toUserId != request.auth.uid;
+        allow read, update, delete: if isAuthenticated() 
+                                    && isPartnerInCouple(getCoupleData(coupleId)) 
+                                    && resource.data.toUserId == request.auth.uid;
+      }
+
+      // Explicit rules for Shared Moments subcollection
+      match /moments/{momentId} {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+
+      // Explicit rules for Notice Board subcollection items
       match /noticeBoardItems/{itemId} {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
       }
