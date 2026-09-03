@@ -180,3 +180,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
 export function useLocationSharing() {
   return useContext(LocationContext);
 }
+
+export function useLocation() {
+  return useContext(LocationContext);
+}

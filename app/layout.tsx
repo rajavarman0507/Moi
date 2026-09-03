@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import AppShell from "@/components/AppShell";
 import PwaRegister from "@/components/PwaRegister";
 import SparklingHearts from "@/components/SparklingHearts";
@@ -31,9 +32,11 @@ export default function RootLayout({
       <body className="antialiased selection:bg-rose-500 selection:text-white relative">
         <SparklingHearts />
         <AuthProvider>
-          <AppShell>
-            {children}
-          </AppShell>
+          <ThemeProvider>
+            <AppShell>
+              {children}
+            </AppShell>
+          </ThemeProvider>
         </AuthProvider>
         <PwaRegister />
       </body>
