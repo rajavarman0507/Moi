@@ -31,10 +31,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased selection:bg-rose-500 selection:text-white relative">
-        <SparklingHearts />
         <AuthProvider>
           <ThemeProvider>
             <ChatProvider>
+              <SparklingHearts />
               <AppShell>
                 {children}
               </AppShell>

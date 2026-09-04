@@ -17,7 +17,26 @@ interface Particle {
 export default function SparklingHearts() {
   const { theme } = useTheme();
   const [particles, setParticles] = useState<Particle[]>([]);
+  const [isLightMode, setIsLightMode] = useState<boolean>(false);
 
+  // 1. Listen for DOM light class & theme context state updates
+  useEffect(() => {
+    const updateThemeState = () => {
+      const isDocLight = typeof document !== "undefined" && document.documentElement.classList.contains("light");
+      const isContextLight = theme === "light" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches);
+      setIsLightMode(isDocLight || isContextLight);
+    };
+
+    updateThemeState();
+
+    if (typeof document !== "undefined") {
+      const observer = new MutationObserver(updateThemeState);
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+      return () => observer.disconnect();
+    }
+  }, [theme]);
+
+  // 2. Generate 60 dense particles for a vibrant floating heart atmosphere
   useEffect(() => {
     const types: Particle["type"][] = [
       "heart-solid",
@@ -34,27 +53,24 @@ export default function SparklingHearts() {
       "lightGradGold",
     ];
 
-    // Generate 55 particles for a rich, romantic floating heart atmosphere
-    const items: Particle[] = Array.from({ length: 55 }).map((_, i) => ({
+    const items: Particle[] = Array.from({ length: 60 }).map((_, i) => ({
       id: i,
-      x: Math.random() * 98 + 1, // 1% to 99% width
-      size: Math.random() * 26 + 14, // 14px to 40px
-      duration: Math.random() * 12 + 8, // 8s to 20s float time
-      delay: Math.random() * 10, // 0s to 10s stagger
+      x: (i * 1.65 + Math.random() * 2) % 98 + 1, // 1% to 99% evenly spread
+      size: Math.random() * 28 + 16, // 16px to 44px
+      duration: Math.random() * 10 + 7, // 7s to 17s float time
+      delay: Math.random() * 8, // 0s to 8s stagger
       type: types[i % types.length],
-      opacity: Math.random() * 0.4 + 0.55, // 0.55 to 0.95 opacity
+      opacity: Math.random() * 0.35 + 0.65, // 0.65 to 1.0 opacity
       gradId: gradIds[i % gradIds.length],
     }));
     setParticles(items);
   }, []);
 
-  const isLight = theme === "light";
-
   return (
     <div
       className={`fixed inset-0 pointer-events-none overflow-hidden z-0 transition-colors duration-500 ${
-        isLight
-          ? "bg-gradient-to-b from-[#FFF5F8] via-[#FFE4EC] to-[#FFD8E5]"
+        isLightMode
+          ? "bg-gradient-to-b from-[#FFF0F5] via-[#FFE4EC] to-[#FFD8E5]"
           : "bg-gradient-to-b from-[#18070E] via-[#2A0E1A] to-[#14050B]"
       }`}
     >
@@ -62,7 +78,7 @@ export default function SparklingHearts() {
       <svg className="absolute w-0 h-0 pointer-events-none" aria-hidden="true">
         <defs>
           <linearGradient id="lightGradRuby" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FF2A6D" />
+            <stop offset="0%" stopColor="#FF1E56" />
             <stop offset="50%" stopColor="#E11D48" />
             <stop offset="100%" stopColor="#9F1239" />
           </linearGradient>
@@ -75,8 +91,8 @@ export default function SparklingHearts() {
             <stop offset="100%" stopColor="#E11D48" />
           </linearGradient>
           <linearGradient id="lightGradCoral" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FF85A1" />
-            <stop offset="100%" stopColor="#FF4D6D" />
+            <stop offset="0%" stopColor="#FF6584" />
+            <stop offset="100%" stopColor="#FF3366" />
           </linearGradient>
           <radialGradient id="lightGradGold" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#FDE047" />
@@ -88,18 +104,18 @@ export default function SparklingHearts() {
 
       {/* Radial ambient glow orbs behind main cards */}
       <div
-        className={`absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] rounded-full blur-[140px] transition-all duration-500 ${
-          isLight ? "bg-rose-300/45" : "bg-rose-900/20"
+        className={`absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full blur-[140px] transition-all duration-500 ${
+          isLightMode ? "bg-rose-300/50" : "bg-rose-900/20"
         }`}
       />
       <div
-        className={`absolute bottom-10 right-10 w-[450px] h-[450px] rounded-full blur-[120px] transition-all duration-500 ${
-          isLight ? "bg-pink-300/45" : "bg-wine-800/20"
+        className={`absolute bottom-10 right-10 w-[500px] h-[500px] rounded-full blur-[120px] transition-all duration-500 ${
+          isLightMode ? "bg-pink-300/50" : "bg-wine-800/20"
         }`}
       />
       <div
-        className={`absolute top-2/3 left-10 w-[350px] h-[350px] rounded-full blur-[110px] transition-all duration-500 ${
-          isLight ? "bg-amber-200/35" : "bg-transparent"
+        className={`absolute top-2/3 left-10 w-[400px] h-[400px] rounded-full blur-[110px] transition-all duration-500 ${
+          isLightMode ? "bg-amber-200/40" : "bg-transparent"
         }`}
       />
 
@@ -107,17 +123,17 @@ export default function SparklingHearts() {
         <div
           key={p.id}
           className={`absolute ${
-            isLight ? "animate-float-heart-light" : "animate-float-heart-dark"
+            isLightMode ? "animate-float-heart-light" : "animate-float-heart-dark"
           }`}
           style={{
             left: `${p.x}%`,
-            bottom: "-45px",
+            bottom: "-50px",
             animationDuration: `${p.duration}s`,
             animationDelay: `${p.delay}s`,
             ["--particle-opacity" as string]: `${p.opacity}`,
           }}
         >
-          {isLight ? (
+          {isLightMode ? (
             /* Render Dedicated Light Mode Gradient SVG Hearts */
             p.type === "sparkle" ? (
               <svg
@@ -126,7 +142,7 @@ export default function SparklingHearts() {
                 viewBox="0 0 24 24"
                 className="animate-pulse"
                 style={{
-                  filter: "drop-shadow(0 2px 8px rgba(217, 119, 6, 0.45))",
+                  filter: "drop-shadow(0 2px 8px rgba(217, 119, 6, 0.55))",
                 }}
               >
                 <path
@@ -136,11 +152,11 @@ export default function SparklingHearts() {
               </svg>
             ) : p.type === "heart-double" ? (
               <svg
-                width={p.size * 1.2}
-                height={p.size * 1.2}
+                width={p.size * 1.25}
+                height={p.size * 1.25}
                 viewBox="0 0 32 32"
                 style={{
-                  filter: "drop-shadow(0 4px 12px rgba(225, 29, 72, 0.4))",
+                  filter: "drop-shadow(0 4px 14px rgba(225, 29, 72, 0.5))",
                 }}
               >
                 <path
@@ -155,11 +171,11 @@ export default function SparklingHearts() {
               </svg>
             ) : p.type === "heart-sparkle" ? (
               <svg
-                width={p.size * 1.15}
-                height={p.size * 1.15}
+                width={p.size * 1.2}
+                height={p.size * 1.2}
                 viewBox="0 0 28 28"
                 style={{
-                  filter: "drop-shadow(0 4px 12px rgba(225, 29, 72, 0.45))",
+                  filter: "drop-shadow(0 4px 14px rgba(225, 29, 72, 0.55))",
                 }}
               >
                 <path
@@ -179,7 +195,7 @@ export default function SparklingHearts() {
                 height={p.size}
                 viewBox="0 0 24 24"
                 style={{
-                  filter: "drop-shadow(0 0 10px rgba(255, 133, 161, 0.75))",
+                  filter: "drop-shadow(0 0 12px rgba(255, 101, 132, 0.85))",
                 }}
               >
                 <path
@@ -193,7 +209,7 @@ export default function SparklingHearts() {
                 height={p.size}
                 viewBox="0 0 24 24"
                 style={{
-                  filter: "drop-shadow(0 3px 10px rgba(225, 29, 72, 0.4))",
+                  filter: "drop-shadow(0 4px 12px rgba(225, 29, 72, 0.5))",
                 }}
               >
                 <path
