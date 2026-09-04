@@ -18,15 +18,15 @@ export default function SparklingHearts() {
   const [particles, setParticles] = useState<Particle[]>([]);
 
   useEffect(() => {
-    // Generate 35 floating hearts and sparkles
-    const items: Particle[] = Array.from({ length: 35 }).map((_, i) => ({
+    // Generate 48 floating hearts and sparkles for ultra-romantic dense animation
+    const items: Particle[] = Array.from({ length: 48 }).map((_, i) => ({
       id: i,
       x: Math.random() * 100, // percentage x-position
-      size: Math.random() * 20 + 10, // size 10px to 30px
-      duration: Math.random() * 12 + 8, // duration 8s to 20s
+      size: Math.random() * 24 + 12, // size 12px to 36px
+      duration: Math.random() * 12 + 7, // duration 7s to 19s
       delay: Math.random() * 10, // stagger start times up to 10s
       type: i % 3 === 0 ? "sparkle" : "heart",
-      opacity: Math.random() * 0.5 + 0.35,
+      opacity: Math.random() * 0.45 + 0.45, // opacity 0.45 to 0.90
     }));
     setParticles(items);
   }, []);
@@ -44,12 +44,12 @@ export default function SparklingHearts() {
       {/* Radial spotlight glow behind central cards */}
       <div
         className={`absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[140px] transition-all duration-500 ${
-          isLight ? "bg-rose-300/35" : "bg-rose-900/20"
+          isLight ? "bg-rose-400/40" : "bg-rose-900/20"
         }`}
       />
       <div
         className={`absolute bottom-10 right-10 w-[400px] h-[400px] rounded-full blur-[120px] transition-all duration-500 ${
-          isLight ? "bg-pink-300/35" : "bg-wine-800/20"
+          isLight ? "bg-pink-400/40" : "bg-wine-800/20"
         }`}
       />
 
@@ -75,22 +75,22 @@ export default function SparklingHearts() {
               fill="currentColor"
               className={
                 isLight
-                  ? "text-rose-500/70 drop-shadow-[0_2px_8px_rgba(225,29,72,0.3)]"
-                  : "text-rose-500/60 drop-shadow-[0_0_8px_rgba(225,29,72,0.6)]"
+                  ? "text-rose-500 drop-shadow-[0_2px_10px_rgba(225,29,72,0.45)]"
+                  : "text-rose-500/70 drop-shadow-[0_0_10px_rgba(225,29,72,0.7)]"
               }
             >
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
             </svg>
           ) : (
             <svg
-              width={p.size * 0.8}
-              height={p.size * 0.8}
+              width={p.size * 0.85}
+              height={p.size * 0.85}
               viewBox="0 0 24 24"
               fill="currentColor"
               className={
                 isLight
-                  ? "text-amber-500/80 drop-shadow-[0_2px_8px_rgba(217,119,6,0.3)] animate-pulse"
-                  : "text-amber-200/70 drop-shadow-[0_0_10px_rgba(254,240,138,0.8)] animate-pulse"
+                  ? "text-amber-500 drop-shadow-[0_2px_10px_rgba(217,119,6,0.45)] animate-pulse"
+                  : "text-amber-200/80 drop-shadow-[0_0_12px_rgba(254,240,138,0.9)] animate-pulse"
               }
             >
               <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
