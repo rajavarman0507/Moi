@@ -172,7 +172,7 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
       }
 
-      match /music/queue/{itemId} {
+      match /musicQueue/{itemId} {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
       }
 

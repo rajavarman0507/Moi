@@ -194,11 +194,11 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, [coupleId]);
 
-  // 4. Subscribe to couples/{coupleId}/music/queue
+  // 4. Subscribe to couples/{coupleId}/musicQueue
   useEffect(() => {
     if (!coupleId) return;
 
-    const queueCollRef = collection(db, "couples", coupleId, "music", "queue");
+    const queueCollRef = collection(db, "couples", coupleId, "musicQueue");
     const q = query(queueCollRef, orderBy("order", "asc"));
 
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -376,7 +376,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const addToQueue = async (track: Track) => {
     if (!coupleId || !user?.uid) return;
 
-    const queueCollRef = collection(db, "couples", coupleId, "music", "queue");
+    const queueCollRef = collection(db, "couples", coupleId, "musicQueue");
     await setDoc(doc(queueCollRef), {
       videoId: track.videoId,
       title: track.title,
@@ -392,7 +392,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const removeFromQueue = async (itemId: string) => {
     if (!coupleId) return;
 
-    const itemDocRef = doc(db, "couples", coupleId, "music", "queue", itemId);
+    const itemDocRef = doc(db, "couples", coupleId, "musicQueue", itemId);
     await deleteDoc(itemDocRef);
   };
 
@@ -400,7 +400,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const reorderQueueItem = async (itemId: string, newOrder: number) => {
     if (!coupleId) return;
 
-    const itemDocRef = doc(db, "couples", coupleId, "music", "queue", itemId);
+    const itemDocRef = doc(db, "couples", coupleId, "musicQueue", itemId);
     await updateDoc(itemDocRef, { order: newOrder });
   };
 
@@ -426,8 +426,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
             db,
             "couples",
             coupleId,
-            "music",
-            "queue",
+            "musicQueue",
             nextQueueItem.id
           );
           const nextSnap = await tx.get(nextDocRef);
