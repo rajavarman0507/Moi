@@ -30,6 +30,8 @@ import {
   MessageCircle,
   Info,
   Sparkles,
+  Smile,
+  X,
 } from "lucide-react";
 
 interface ChatMessage {
@@ -40,7 +42,46 @@ interface ChatMessage {
   read: boolean;
   createdAt: any;
   text?: string;
+  isOptimistic?: boolean;
 }
+
+// Mobile Chat Categorized Emoji Data
+const EMOJI_CATEGORIES = [
+  {
+    name: "Love & Romance",
+    emojis: [
+      "❤️", "💕", "💖", "💗", "💓", "💞", "💘", "💌",
+      "🌹", "🌸", "🌺", "🌷", "💍", "💎", "💋", "💒",
+      "🥂", "🕯️", "🧸", "🎁", "👩‍❤️‍👨", "👩‍❤️‍💋‍👨", "🫶", "🥰"
+    ],
+  },
+  {
+    name: "Sweet Expressions",
+    emojis: [
+      "😘", "😍", "😋", "😊", "🥳", "🥺", "🥹", "😉",
+      "🤪", "🤩", "🤗", "😴", "🤫", "🤭", "😇", "😌",
+      "🤤", "🤤", "🤭", "🫡", "🤗", "😻", "🙈", "✨"
+    ],
+  },
+  {
+    name: "Fun & Vibes",
+    emojis: [
+      "🔥", "✨", "⭐", "🌟", "🌙", "💫", "🌈", "🎉",
+      "🎊", "🎈", "🍾", "🍷", "🍰", "🍦", "🍭", "🍩",
+      "🍕", "🍿", "🎵", "🎶", "👑", "🐣", "🦋", "💯"
+    ],
+  },
+  {
+    name: "Gestures & Hands",
+    emojis: [
+      "👍", "🤌", "🫰", "🤝", "👏", "🙌", "🫶", "👐",
+      "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆",
+      "👇", "👋", "🤚", "🖐️", "✋", "🖖", "🙏", "💪"
+    ],
+  },
+];
+
+const QUICK_EMOJIS = ["❤️", "😘", "💖", "🥰", "🌹", "💋", "🔥", "✨", "🥺", "👍", "🥳", "💍"];
 
 export default function ChatPage() {
   const { user, couple, partnerProfile, userProfile } = useAuth();
@@ -48,12 +89,13 @@ export default function ChatPage() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState<string>("");
-  const [isSending, setIsSending] = useState<boolean>(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
   const [partnerIsTyping, setPartnerIsTyping] = useState<boolean>(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingStateRef = useRef<boolean>(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const coupleId = couple?.id;
   const partnerUid = couple?.userIds?.find((id) => id !== user?.uid);
@@ -69,7 +111,7 @@ export default function ChatPage() {
       if (!coupleId || !user?.uid) return;
 
       const unreadPartnerMsgs = msgs.filter(
-        (m) => m.senderUid !== user.uid && !m.read
+        (m) => m.senderUid !== user.uid && !m.read && !m.isOptimistic
       );
 
       if (unreadPartnerMsgs.length === 0) return;
@@ -133,7 +175,7 @@ export default function ChatPage() {
         markMessagesAsRead(decryptedList);
 
         // Scroll to bottom
-        setTimeout(() => scrollToBottom("smooth"), 100);
+        setTimeout(() => scrollToBottom("smooth"), 50);
       },
       (err) => {
         console.error("Messages snapshot error:", err);
@@ -212,6 +254,15 @@ export default function ChatPage() {
     }, 2500);
   };
 
+  // Append Emoji to input text
+  const addEmoji = (emoji: string) => {
+    setInputText((prev) => prev + emoji);
+    resetInactivityTimer();
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
   // 4. Auto-Pruning logic (removes items beyond 300 when count > 500)
   const checkAndPruneMessages = async () => {
     if (!coupleId) return;
@@ -222,8 +273,6 @@ export default function ChatPage() {
 
       if (totalCount > 500) {
         const deleteCount = totalCount - 300;
-        console.log(`Auto-pruning ${deleteCount} old chat messages...`);
-
         const oldestQuery = query(collRef, orderBy("createdAt", "asc"), limit(deleteCount));
         const oldestSnap = await getDocs(oldestQuery);
 
@@ -233,30 +282,45 @@ export default function ChatPage() {
         });
 
         await batch.commit();
-        console.log("Chat auto-pruning complete.");
       }
     } catch (e) {
       console.error("Pruning messages error:", e);
     }
   };
 
-  // 5. Send Message Action
+  // 5. Ultra-Fast Sub-Second Message Delivery (Optimistic UI + Async Writes)
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const textToSend = inputText.trim();
-    if (!textToSend || !cryptoKey || !coupleId || !user?.uid || isSending) return;
+    if (!textToSend || !cryptoKey || !coupleId || !user?.uid) return;
 
-    setIsSending(true);
+    // 1. Instant local reset & optimistic bubble insertion (0ms latency!)
+    setInputText("");
+    setShowEmojiPicker(false);
 
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      cipherText: "",
+      ivHex: "",
+      senderUid: user.uid,
+      read: false,
+      createdAt: new Date(),
+      text: textToSend,
+      isOptimistic: true,
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => scrollToBottom("auto"), 10);
+
+    // Clear typing status immediately
+    if (typingDebounceRef.current) clearTimeout(typingDebounceRef.current);
+    setUserTypingStatus(false);
+
+    // 2. Asynchronous background encryption & Firestore write
     try {
-      // Clear typing indicator immediately
-      if (typingDebounceRef.current) clearTimeout(typingDebounceRef.current);
-      await setUserTypingStatus(false);
-
-      // Fast instant client-side encryption using pre-derived key
       const { cipherText, ivHex } = await encryptWithKey(textToSend, cryptoKey);
 
-      // Add to Firestore messages
       const msgsCollRef = collection(db, "couples", coupleId, "chatMessages");
       await addDoc(msgsCollRef, {
         cipherText,
@@ -266,28 +330,26 @@ export default function ChatPage() {
         createdAt: serverTimestamp(),
       });
 
-      setInputText("");
-
-      // Trigger Zero-Plaintext Notification to partner if partner exists
+      // Trigger Zero-Plaintext Notification asynchronously
       if (partnerUid) {
         const notifCollRef = collection(db, "couples", coupleId, "notifications");
         const senderName = userProfile?.displayName || "Your partner";
-        await addDoc(notifCollRef, {
+        addDoc(notifCollRef, {
           toUserId: partnerUid,
           type: "chat",
           title: "New Message",
           body: `New message from ${senderName} 💬`,
           createdAt: serverTimestamp(),
           read: false,
-        });
+        }).catch((e) => console.error("Notification send error:", e));
       }
 
-      // Check & prune message storage if needed asynchronously
-      checkAndPruneMessages();
+      // Check & prune message storage asynchronously
+      checkAndPruneMessages().catch((e) => console.error("Pruning error:", e));
     } catch (err) {
       console.error("Error sending encrypted message:", err);
-    } finally {
-      setIsSending(false);
+      // Remove optimistic msg on hard failure
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
     }
   };
 
@@ -324,11 +386,11 @@ export default function ChatPage() {
     );
   }
 
-  // UNLOCKED CHAT UI
+  // UNLOCKED CHAT UI - Unified outer border for 100% continuous border visibility
   return (
-    <div className="max-w-4xl mx-auto flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
+    <div className="max-w-4xl mx-auto flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] rounded-3xl border border-rose-500/40 bg-[#16060E]/95 overflow-hidden shadow-2xl relative">
       {/* Header & Lock Button */}
-      <div className="flex items-center justify-between p-4 rounded-t-3xl bg-[#230917]/90 backdrop-blur-xl border-t border-x border-rose-500/30">
+      <div className="flex items-center justify-between p-4 bg-[#230917]/95 backdrop-blur-xl border-b border-rose-500/30">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 to-wine-600 flex items-center justify-center text-white shadow-glow">
             <MessageCircle className="w-5 h-5 text-white" />
@@ -358,15 +420,15 @@ export default function ChatPage() {
       </div>
 
       {/* Retention Trade-off Notice Banner */}
-      <div className="px-4 py-2.5 bg-rose-950/40 border-x border-b border-rose-900/40 text-rose-200/90 text-xs flex items-center gap-2">
+      <div className="px-4 py-2 bg-rose-950/50 border-b border-rose-500/20 text-rose-200/90 text-xs flex items-center gap-2">
         <Info className="w-4 h-4 text-rose-400 shrink-0" />
         <p className="leading-snug">
           <strong className="text-white">Note:</strong> Chat keeps your 300 most recent encrypted messages. (Love letters in Private Hub remain saved forever!).
         </p>
       </div>
 
-      {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#170610]/95 border-x border-rose-900/30">
+      {/* Messages Scroll Area - Continuous Crisp Border Line */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#170610]/95">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-8 text-rose-300/60 space-y-3">
             <Sparkles className="w-10 h-10 text-rose-400/50 animate-pulse" />
@@ -429,24 +491,88 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Categorized Mobile Emoji Picker Panel */}
+      {showEmojiPicker && (
+        <div className="p-3 bg-[#1F0816] border-t border-rose-500/30 shadow-2xl max-h-56 overflow-y-auto space-y-3">
+          <div className="flex items-center justify-between border-b border-rose-900/40 pb-1.5">
+            <span className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+              <Smile className="w-4 h-4 text-rose-400" />
+              <span>Tap an emoji to send</span>
+            </span>
+            <button
+              onClick={() => setShowEmojiPicker(false)}
+              className="p-1 rounded-lg hover:bg-rose-950 text-rose-400"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {EMOJI_CATEGORIES.map((category) => (
+            <div key={category.name} className="space-y-1">
+              <h4 className="text-[11px] font-semibold text-rose-300/70">{category.name}</h4>
+              <div className="grid grid-cols-8 sm:grid-cols-12 gap-1 text-xl">
+                {category.emojis.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => addEmoji(emoji)}
+                    className="p-1.5 hover:bg-rose-900/40 rounded-xl transition-all hover:scale-125 text-center"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Quick Emoji Bar */}
+      <div className="px-3 py-1.5 bg-[#1F0816]/90 border-t border-rose-500/20 flex items-center space-x-1 overflow-x-auto scrollbar-none">
+        <span className="text-[10px] font-semibold text-rose-300/60 shrink-0 pr-1">Quick:</span>
+        {QUICK_EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            onClick={() => addEmoji(emoji)}
+            className="px-2 py-0.5 hover:bg-rose-900/50 rounded-lg text-base transition-transform active:scale-125 shrink-0"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+
       {/* Message Input & Send Form */}
       <form
         onSubmit={handleSendMessage}
-        className="p-3 md:p-4 bg-[#230917] border-b border-x border-rose-500/30 rounded-b-3xl flex items-center space-x-2"
+        className="p-3 md:p-4 bg-[#230917] border-t border-rose-500/30 flex items-center space-x-2"
       >
+        <button
+          type="button"
+          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          className={`p-2.5 rounded-2xl border transition-all ${
+            showEmojiPicker
+              ? "bg-rose-600 text-white border-rose-400"
+              : "bg-[#16060E] text-rose-300/70 border-rose-500/30 hover:text-rose-200 hover:border-rose-400"
+          }`}
+          title="Toggle Mobile Emoji Picker"
+        >
+          <Smile className="w-5 h-5" />
+        </button>
+
         <input
+          ref={inputRef}
           type="text"
           value={inputText}
           onChange={handleInputChange}
           placeholder="Type an encrypted message..."
-          disabled={isSending}
           className="flex-1 bg-[#16060E] border border-rose-500/30 text-white placeholder:text-rose-300/40 text-sm px-4 py-3 rounded-2xl focus:outline-none focus:border-rose-400 transition-colors"
           style={{ color: "#FFFFFF", backgroundColor: "#16060E" }}
         />
 
         <button
           type="submit"
-          disabled={!inputText.trim() || isSending}
+          disabled={!inputText.trim()}
           className="moi-button-primary px-5 py-3 rounded-2xl flex items-center justify-center space-x-1.5 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Send className="w-4 h-4 text-white" />
