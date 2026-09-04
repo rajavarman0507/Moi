@@ -83,3 +83,27 @@ input, textarea {
   background: rgba(126, 36, 82, 0.7);
   border-color: rgba(251, 113, 133, 0.6);
 }
+
+/* Custom Dark Glass Love Theme Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(23, 6, 16, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(225, 29, 72, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 63, 94, 0.7);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(225, 29, 72, 0.4) rgba(23, 6, 16, 0.8);
+}
