@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
+import { collection, onSnapshot } from "firebase/firestore";
 import { Image as ImageIcon, Lock, Sparkles, ArrowRight, Palette } from "lucide-react";
 
 export interface SharedMoment {
@@ -27,13 +28,18 @@ export default function MomentsStrip() {
     if (!coupleId) return;
 
     const momentsCollRef = collection(db, "couples", coupleId, "moments");
-    const q = query(momentsCollRef, orderBy("createdAt", "desc"), limit(8));
 
     const unsubscribe = onSnapshot(
-      q,
+      momentsCollRef,
       (snap) => {
         const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as SharedMoment));
-        setMoments(items);
+        // Sort chronologically in memory descending safely
+        items.sort((a, b) => {
+          const tA = a.createdAt?.seconds || a.createdAt?.toMillis?.() || Date.now();
+          const tB = b.createdAt?.seconds || b.createdAt?.toMillis?.() || Date.now();
+          return tB - tA;
+        });
+        setMoments(items.slice(0, 8));
         setLoading(false);
       },
       (err) => {
@@ -89,7 +95,16 @@ export default function MomentsStrip() {
               className="w-40 h-32 rounded-2xl bg-wine-900/60 border border-rose-500/30 overflow-hidden shrink-0 relative group hover:border-rose-400 transition-all shadow-md"
             >
               {m.type === "sketch" && m.imageUrl ? (
-                <img src={m.imageUrl} alt={m.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                <div className="relative w-full h-full">
+                  <Image
+                    src={m.imageUrl}
+                    alt={m.title || "Sketch"}
+                    fill
+                    sizes="160px"
+                    className="object-cover group-hover:scale-105 transition-transform"
+                    unoptimized={m.imageUrl.startsWith("data:")}
+                  />
+                </div>
               ) : m.type === "memory_placeholder" ? (
                 <div className="w-full h-full p-3 flex flex-col items-center justify-center text-center bg-gradient-to-br from-[#2D0A1C] to-[#17040E] text-rose-200 space-y-1">
                   <Lock className="w-6 h-6 text-amber-300 animate-pulse" />
@@ -103,7 +118,7 @@ export default function MomentsStrip() {
                 </div>
               )}
 
-              <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/90 to-transparent text-[10px] text-rose-100 font-semibold truncate px-2">
+              <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/90 to-transparent text-[10px] text-rose-100 font-semibold truncate px-2 z-10">
                 {m.title}
               </div>
             </div>

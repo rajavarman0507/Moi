@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { collection, onSnapshot } from "firebase/firestore";
 import WaitingForPartner from "@/components/WaitingForPartner";
 import { Image as ImageIcon, Lock, Sparkles, X, Palette, Heart, Calendar } from "lucide-react";
 import Link from "next/link";
@@ -144,11 +145,16 @@ export default function MomentsPage() {
               >
                 <div className="w-full aspect-square rounded-2xl overflow-hidden bg-wine-900/60 border border-rose-500/20 relative flex items-center justify-center">
                   {m.type === "sketch" && m.imageUrl ? (
-                    <img
-                      src={m.imageUrl}
-                      alt={m.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
+                    <div className="relative w-full h-full">
+                      <Image
+                        src={m.imageUrl}
+                        alt={m.title || "Sketch"}
+                        fill
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 33vw, 25vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        unoptimized={m.imageUrl.startsWith("data:")}
+                      />
+                    </div>
                   ) : m.type === "memory_placeholder" ? (
                     <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-gradient-to-br from-[#2D0A1C] to-[#17040E] text-rose-200 space-y-2">
                       <Lock className="w-10 h-10 text-amber-300 animate-pulse" />
@@ -188,7 +194,16 @@ export default function MomentsPage() {
               >
                 <X className="w-6 h-6" />
               </button>
-              <img src={selectedImage} alt="Full Sketch" className="max-w-full max-h-full object-contain rounded-3xl shadow-2xl border border-rose-500/40" />
+              <div className="relative w-full h-full max-w-2xl max-h-[80vh]">
+                <Image
+                  src={selectedImage}
+                  alt="Full Sketch"
+                  fill
+                  sizes="100vw"
+                  className="object-contain rounded-3xl shadow-2xl"
+                  unoptimized={selectedImage.startsWith("data:")}
+                />
+              </div>
             </div>
           </div>
         )}

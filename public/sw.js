@@ -1,5 +1,5 @@
 // Moi Web App - Versioned Service Worker for PWA Installability
-const CACHE_NAME = 'moi-v1.0.2';
+const CACHE_NAME = 'moi-v1.0.3';
 
 const STATIC_ASSETS = [
   '/',
