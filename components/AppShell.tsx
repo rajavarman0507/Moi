@@ -9,6 +9,7 @@ import LocationBanner from "@/components/LocationBanner";
 import GlobalPresence from "@/components/GlobalPresence";
 import NotificationListener from "@/components/NotificationListener";
 import BugReportModal from "@/components/BugReportModal";
+import IncomingCallOverlay from "@/components/IncomingCallOverlay";
 import OnboardingTour from "@/components/OnboardingTour";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -24,6 +25,7 @@ import {
   LogOut,
   User as UserIcon,
   MessageCircle,
+  PhoneCall,
 } from "lucide-react";
 
 interface NavItem {
@@ -35,6 +37,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: "Home", href: "/", icon: Home },
   { name: "Chat", href: "/chat", icon: MessageCircle },
+  { name: "Call", href: "/call", icon: PhoneCall },
   { name: "Doodle", href: "/doodle", icon: Palette },
   { name: "Moments", href: "/moments", icon: ImageIcon },
   { name: "Games", href: "/games", icon: Gamepad2 },
@@ -83,6 +86,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Floating Bug Report Modal */}
         <BugReportModal />
+
+        {/* Global WebRTC Incoming Call Overlay */}
+        <IncomingCallOverlay />
 
         {/* Desktop Left Sidebar */}
         <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-[#16060E]/85 backdrop-blur-xl border-r border-rose-900/30 p-6 z-20 justify-between shadow-2xl">

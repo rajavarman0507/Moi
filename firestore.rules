@@ -105,6 +105,36 @@ service cloud.firestore {
         allow write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId)) && request.auth.uid == userId;
       }
 
+      // Explicit rules for WebRTC Call Signaling (call/current & iceCandidates subcollection)
+      match /call/current {
+        allow read: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+
+        // Create/Update to 'ringing' (New Offer): caller must be auth user, AND existing doc must not exist or be in terminal state
+        allow create, update: if isAuthenticated() 
+                              && isPartnerInCouple(getCoupleData(coupleId)) 
+                              && request.resource.data.status == 'ringing'
+                              && request.resource.data.callerId == request.auth.uid
+                              && (resource == null || resource.data.status in ['idle', 'ended', 'rejected', 'missed']);
+
+        // Accept ('active') or Decline ('rejected'): callee must be auth user
+        allow update: if isAuthenticated() 
+                      && isPartnerInCouple(getCoupleData(coupleId)) 
+                      && resource.data.calleeId == request.auth.uid
+                      && request.resource.data.status in ['active', 'rejected'];
+
+        // End ('ended'), Missed ('missed'), or Reset ('idle'): caller or callee
+        allow update: if isAuthenticated() 
+                      && isPartnerInCouple(getCoupleData(coupleId)) 
+                      && request.resource.data.status in ['ended', 'missed', 'idle'];
+      }
+
+      match /call/current/iceCandidates/{candidateId} {
+        allow read, delete: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+        allow create: if isAuthenticated() 
+                      && isPartnerInCouple(getCoupleData(coupleId)) 
+                      && request.resource.data.fromUserId == request.auth.uid;
+      }
+
       // Explicit rules for Private Hub subcollections (letters, memories, pinConfig)
       match /privateHub/{document=**} {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
