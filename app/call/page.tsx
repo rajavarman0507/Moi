@@ -55,37 +55,7 @@ interface CallData {
   endedAt?: any;
 }
 
-// Helper: Web Audio API volume booster (180% gain amplifier for loud speech)
-const boostAudioStreamVolume = (stream: MediaStream): MediaStream => {
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return stream;
 
-    const audioTracks = stream.getAudioTracks();
-    if (audioTracks.length === 0) return stream;
-
-    const ctx = new AudioCtx();
-    if (ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
-    }
-
-    const source = ctx.createMediaStreamSource(new MediaStream(audioTracks));
-    const gainNode = ctx.createGain();
-    gainNode.gain.value = 1.8; // 180% volume boost for clear loud audio
-
-    const dest = ctx.createMediaStreamDestination();
-    source.connect(gainNode);
-
-    const boostedStream = new MediaStream();
-    dest.stream.getAudioTracks().forEach((t) => boostedStream.addTrack(t));
-    stream.getVideoTracks().forEach((t) => boostedStream.addTrack(t));
-
-    return boostedStream;
-  } catch (err) {
-    console.error("Audio volume boost fallback:", err);
-    return stream;
-  }
-};
 
 // Helper: SDP Opus Audio Optimization (128 kbps bitrate + FEC for high-clarity sound)
 const optimizeAudioSdp = (sdp?: string): string | undefined => {
@@ -183,7 +153,7 @@ function CallContent() {
     }
   }, [localStream, callData?.status, callData?.type, callType]);
 
-  // 3. Bind Remote Stream to Remote Video or Remote Audio Ref whenever element mounts
+  // 3. Bind Remote Stream to Remote Video and Remote Audio elements
   useEffect(() => {
     if (!remoteStream) return;
 
@@ -192,18 +162,14 @@ function CallContent() {
     if (activeType === "video" && remoteVideoRef.current) {
       if (remoteVideoRef.current.srcObject !== remoteStream) {
         remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.volume = 1.0;
       }
       remoteVideoRef.current.play().catch((err) => console.log("Remote video play notice:", err));
+    }
 
-      // Clear audio ref in video mode so video element handles audio output without duplication
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = null;
-      }
-    } else if (remoteAudioRef.current) {
+    // Always attach raw remoteStream to remoteAudioRef as well so audio output is guaranteed on all devices
+    if (remoteAudioRef.current) {
       if (remoteAudioRef.current.srcObject !== remoteStream) {
         remoteAudioRef.current.srcObject = remoteStream;
-        remoteAudioRef.current.volume = 1.0;
       }
       remoteAudioRef.current.play().catch((err) => console.log("Remote audio play notice:", err));
     }
@@ -303,9 +269,8 @@ function CallContent() {
         remoteStreamRef.current = incomingStream;
       }
 
-      // Boost audio volume with GainNode for crystal clarity & loudness
-      const boostedStream = boostAudioStreamVolume(incomingStream);
-      setRemoteStream(boostedStream);
+      // Set raw WebRTC MediaStream directly for zero-latency audio playback
+      setRemoteStream(incomingStream);
     };
 
     return pc;
