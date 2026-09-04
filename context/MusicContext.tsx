@@ -154,13 +154,29 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
           onReady: (evt: any) => {
             setIsPlayerReady(true);
             const savedVol = localStorage.getItem("moi_music_volume");
-            if (savedVol) evt.target.setVolume(parseInt(savedVol, 10));
-            else evt.target.setVolume(80);
+            const vol = savedVol ? parseInt(savedVol, 10) : 80;
+            if (evt.target.unMute) evt.target.unMute();
+            if (evt.target.setVolume) evt.target.setVolume(vol);
+
+            if (currentTrackRef.current) {
+              syncLocalPlayerWithState(currentTrackRef.current, null);
+            }
           },
           onStateChange: (evt: any) => {
             // Track Ended (0) -> Execute Atomic Firestore Transaction to advance queue
             if (evt.data === 0) {
               handleTrackEnd();
+            } else if (evt.data === 1) {
+              setPendingAutoplayJoin(false);
+            } else if ((evt.data === 2 || evt.data === -1) && currentTrackRef.current?.isPlaying) {
+              setTimeout(() => {
+                if (playerRef.current && playerRef.current.getPlayerState) {
+                  const st = playerRef.current.getPlayerState();
+                  if (st !== 1 && st !== 3 && currentTrackRef.current?.isPlaying) {
+                    setPendingAutoplayJoin(true);
+                  }
+                }
+              }, 500);
             }
           },
         },
@@ -169,6 +185,13 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
 
     initYT();
   }, []);
+
+  // Synchronize playback whenever player becomes ready or track changes
+  useEffect(() => {
+    if (isPlayerReady && currentTrack) {
+      syncLocalPlayerWithState(currentTrack, null);
+    }
+  }, [isPlayerReady, currentTrack?.videoId, currentTrack?.isPlaying]);
 
   // 3. Subscribe to couples/{coupleId}/music/current
   useEffect(() => {
@@ -230,15 +253,22 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (data.isPlaying) {
-        const playPromise = playerRef.current.playVideo();
-        // Check if browser blocked unmuted autoplay
-        if (playPromise && typeof playPromise.catch === "function") {
-          playPromise.catch(() => {
+        if (playerRef.current.unMute) playerRef.current.unMute();
+        if (playerRef.current.setVolume) playerRef.current.setVolume(localVolume);
+        playerRef.current.playVideo();
+
+        setTimeout(() => {
+          if (!playerRef.current || !playerRef.current.getPlayerState) return;
+          const st = playerRef.current.getPlayerState();
+          if (st !== 1 && st !== 3) {
             setPendingAutoplayJoin(true);
-          });
-        }
+          } else {
+            setPendingAutoplayJoin(false);
+          }
+        }, 800);
       } else {
         playerRef.current.pauseVideo();
+        setPendingAutoplayJoin(false);
       }
       return;
     }
@@ -254,12 +284,21 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (playerRef.current.getPlayerState() !== 1) {
-        const playPromise = playerRef.current.playVideo();
-        if (playPromise && typeof playPromise.catch === "function") {
-          playPromise.catch(() => {
+        if (playerRef.current.unMute) playerRef.current.unMute();
+        if (playerRef.current.setVolume) playerRef.current.setVolume(localVolume);
+        playerRef.current.playVideo();
+
+        setTimeout(() => {
+          if (!playerRef.current || !playerRef.current.getPlayerState) return;
+          const st = playerRef.current.getPlayerState();
+          if (st !== 1 && st !== 3) {
             setPendingAutoplayJoin(true);
-          });
-        }
+          } else {
+            setPendingAutoplayJoin(false);
+          }
+        }, 800);
+      } else {
+        setPendingAutoplayJoin(false);
       }
     } else {
       if (playerRef.current.pauseVideo) {
@@ -268,6 +307,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
       if (data.positionAtUpdate !== undefined) {
         playerRef.current.seekTo(data.positionAtUpdate, true);
       }
+      setPendingAutoplayJoin(false);
     }
   };
 
@@ -310,6 +350,8 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     const elapsedSec = (Date.now() - updatedAtMs) / 1000;
     const expectedPos = Math.max(0, currentTrack.positionAtUpdate + elapsedSec);
 
+    if (playerRef.current.unMute) playerRef.current.unMute();
+    if (playerRef.current.setVolume) playerRef.current.setVolume(localVolume);
     playerRef.current.seekTo(expectedPos, true);
     playerRef.current.playVideo();
   };
@@ -525,7 +567,10 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {/* Off-Screen Global YouTube IFrame Player Instance */}
-      <div className="hidden" aria-hidden="true">
+      <div
+        className="fixed -top-[9999px] -left-[9999px] w-1 h-1 opacity-0 pointer-events-none overflow-hidden"
+        aria-hidden="true"
+      >
         <div id="global-yt-player-container" />
       </div>
       {children}
