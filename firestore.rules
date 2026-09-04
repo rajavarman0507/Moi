@@ -167,6 +167,15 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
       }
 
+      // Explicit rules for Music Stream subcollections (current & queue)
+      match /music/current {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+
+      match /music/queue/{itemId} {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+
       // Fallback for all future nested collections under couples/{coupleId}
       match /{allSubcollections=**} {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));

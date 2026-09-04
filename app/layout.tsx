@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ChatProvider } from "@/context/ChatContext";
+import { MusicProvider } from "@/context/MusicContext";
 import AppShell from "@/components/AppShell";
 import PwaRegister from "@/components/PwaRegister";
 import SparklingHearts from "@/components/SparklingHearts";
@@ -34,10 +35,12 @@ export default function RootLayout({
         <AuthProvider>
           <ThemeProvider>
             <ChatProvider>
-              <SparklingHearts />
-              <AppShell>
-                {children}
-              </AppShell>
+              <MusicProvider>
+                <SparklingHearts />
+                <AppShell>
+                  {children}
+                </AppShell>
+              </MusicProvider>
             </ChatProvider>
           </ThemeProvider>
         </AuthProvider>

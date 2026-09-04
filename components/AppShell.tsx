@@ -10,6 +10,7 @@ import GlobalPresence from "@/components/GlobalPresence";
 import NotificationListener from "@/components/NotificationListener";
 import BugReportModal from "@/components/BugReportModal";
 import IncomingCallOverlay from "@/components/IncomingCallOverlay";
+import MusicMiniPlayer from "@/components/MusicMiniPlayer";
 import OnboardingTour from "@/components/OnboardingTour";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -26,6 +27,7 @@ import {
   User as UserIcon,
   MessageCircle,
   PhoneCall,
+  Radio,
 } from "lucide-react";
 
 interface NavItem {
@@ -38,6 +40,7 @@ const navItems: NavItem[] = [
   { name: "Home", href: "/", icon: Home },
   { name: "Chat", href: "/chat", icon: MessageCircle },
   { name: "Call", href: "/call", icon: PhoneCall },
+  { name: "Music", href: "/music", icon: Radio },
   { name: "Doodle", href: "/doodle", icon: Palette },
   { name: "Moments", href: "/moments", icon: ImageIcon },
   { name: "Games", href: "/games", icon: Gamepad2 },
@@ -89,6 +92,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Global WebRTC Incoming Call Overlay */}
         <IncomingCallOverlay />
+
+        {/* Global Persistent Shared Music Mini-Player */}
+        <MusicMiniPlayer />
 
         {/* Desktop Left Sidebar */}
         <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-[#16060E]/85 backdrop-blur-xl border-r border-rose-900/30 p-6 z-20 justify-between shadow-2xl">
