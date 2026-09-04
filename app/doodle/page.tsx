@@ -59,10 +59,24 @@ interface DoodleElement {
 const COLORS = ["#FB7185", "#FDE047", "#60A5FA", "#34D399", "#A78BFA", "#FFFFFF", "#000000"];
 
 const EMOJIS = [
-  "❤️", "💕", "💖", "😘", "💋", "✨", "🌟", "🌸", 
-  "👑", "🌹", "🎨", "🧸", "🍦", "🎉", "💌", "🔥", 
-  "🐱", "🐣", "🦋", "💍", "🎁", "💯", "😍", "🥳", "🍓", "🧁"
+  "❤️", "💕", "💖", "💗", "💓", "💞", "💘", "💌",
+  "😘", "💋", "😍", "🥰", "🥳", "🤩", "🌟", "✨",
+  "🌸", "🌺", "🌹", "🌷", "🌻", "👑", "🎨", "🧸",
+  "🍦", "🧁", "🍓", "🍒", "🎂", "🎉", "🔥", "🐱",
+  "🐣", "🦋", "💍", "🎁", "💯", "🎈", "🍀", "💎",
+  "⭐", "🎵", "☕", "🍿", "🚗", "🌈", "☀️", "🌙"
 ];
+
+function dataURItoBlob(dataURI: string): Blob {
+  const byteString = atob(dataURI.split(",")[1]);
+  const mimeString = dataURI.split(",")[0].split(":")[1].split(";")[0];
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mimeString });
+}
 
 export default function DoodlePage() {
   const router = useRouter();
@@ -331,7 +345,7 @@ export default function DoodlePage() {
     }
   };
 
-  // Save Canvas Action -> Saves to Sketches in Shared Moments
+  // Fast & Bulletproof Save Canvas Action -> Saves to Sketches in Shared Moments
   const handleSaveCanvas = async () => {
     const canvas = canvasRef.current;
     if (!canvas || !coupleId) return;
@@ -339,20 +353,26 @@ export default function DoodlePage() {
     setIsSaving(true);
 
     try {
-      // 1. Convert Canvas to Blob
-      const blob: Blob | null = await new Promise((resolve) =>
-        canvas.toBlob((b) => resolve(b), "image/png")
-      );
+      const dataUrl = canvas.toDataURL("image/png");
+      let imageUrl = dataUrl;
 
-      if (!blob) throw new Error("Failed to render canvas image.");
+      // Try uploading to Cloud Storage with a 4-second timeout, falling back gracefully to Data URL
+      try {
+        const blob = dataURItoBlob(dataUrl);
+        const sketchId = `sketch_${Date.now()}`;
+        const storageRef = ref(storage, `couples/${coupleId}/sketches/${sketchId}.png`);
 
-      // 2. Upload PNG to Cloud Storage
-      const sketchId = `sketch_${Date.now()}`;
-      const storageRef = ref(storage, `couples/${coupleId}/sketches/${sketchId}.png`);
-      await uploadBytes(storageRef, blob);
-      const imageUrl = await getDownloadURL(storageRef);
+        const uploadPromise = uploadBytes(storageRef, blob).then(() => getDownloadURL(storageRef));
+        const timeoutPromise = new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error("Storage timeout")), 4000)
+        );
 
-      // 3. Save to Shared Moments collection under type: "sketch"
+        imageUrl = await Promise.race([uploadPromise, timeoutPromise]);
+      } catch (stgErr) {
+        console.warn("Storage upload timed out or fallback to DataURL:", stgErr);
+      }
+
+      // Add to Shared Moments collection under type: "sketch"
       const momentsCollRef = collection(db, "couples", coupleId, "moments");
       await addDoc(momentsCollRef, {
         type: "sketch",
@@ -362,7 +382,7 @@ export default function DoodlePage() {
         createdAt: serverTimestamp(),
       });
 
-      // 4. Send Notification if partner exists
+      // Send Notification to Partner if present
       if (partnerUid) {
         const notifCollRef = collection(db, "couples", coupleId, "notifications");
         await addDoc(notifCollRef, {
@@ -373,15 +393,16 @@ export default function DoodlePage() {
           imageUrl,
           createdAt: serverTimestamp(),
           read: false,
-        });
+        }).catch(() => {});
       }
 
       setSaveSuccess(true);
       setTimeout(() => {
         router.push("/moments");
-      }, 1200);
+      }, 1000);
     } catch (err) {
       console.error("Error saving canvas:", err);
+      alert("Failed to save sketch. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -503,7 +524,7 @@ export default function DoodlePage() {
                   }`}
                 >
                   <Smile className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Emoji Stamp</span>
+                  <span>Emoji Stamp ({EMOJIS.length})</span>
                 </button>
 
                 <button
@@ -582,7 +603,7 @@ export default function DoodlePage() {
             {activeTool === "emoji" && (
               <div className="space-y-3 pt-2 border-t border-rose-900/40">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-300">Click anywhere on canvas to stamp emoji (syncs live):</span>
+                  <span className="text-xs font-bold text-amber-300">Click anywhere on canvas to stamp emoji:</span>
                   <div className="flex items-center space-x-2">
                     <span className="text-xs text-rose-300 font-semibold">Emoji Size:</span>
                     <input
@@ -597,8 +618,8 @@ export default function DoodlePage() {
                   </div>
                 </div>
 
-                {/* Rich Emoji Selector Grid */}
-                <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-2 bg-wine-900/50 rounded-xl border border-rose-500/20">
+                {/* Expanded 48+ Emoji Selector Grid */}
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2.5 bg-wine-900/50 rounded-xl border border-rose-500/20">
                   {EMOJIS.map((e) => (
                     <button
                       key={e}

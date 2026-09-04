@@ -31,12 +31,17 @@ export default function MomentsPage() {
     if (!coupleId) return;
 
     const momentsCollRef = collection(db, "couples", coupleId, "moments");
-    const q = query(momentsCollRef, orderBy("createdAt", "desc"));
 
     const unsubscribe = onSnapshot(
-      q,
+      momentsCollRef,
       (snap) => {
         const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as SharedMoment));
+        // Sort chronologically in memory descending safely
+        items.sort((a, b) => {
+          const tA = a.createdAt?.seconds || a.createdAt?.toMillis?.() || Date.now();
+          const tB = b.createdAt?.seconds || b.createdAt?.toMillis?.() || Date.now();
+          return tB - tA;
+        });
         setMoments(items);
       },
       (err) => console.error("Moments snapshot error:", err)
