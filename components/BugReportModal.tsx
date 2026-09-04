@@ -71,10 +71,10 @@ export default function BugReportModal() {
       {/* Floating Trigger Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 md:bottom-6 right-6 z-40 px-3.5 py-2.5 rounded-2xl bg-rose-950/90 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center space-x-2 shadow-2xl backdrop-blur-md transition-all hover:scale-105"
+        className="fixed bottom-16 md:bottom-6 right-3 sm:right-6 z-40 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-rose-950/95 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-[11px] sm:text-xs font-bold flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all hover:scale-105 shrink-0 opacity-90 hover:opacity-100"
         title="Report a bug or suggestion"
       >
-        <Bug className="w-4 h-4 text-rose-400 animate-pulse" />
+        <Bug className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400 animate-pulse" />
         <span>Report Bug</span>
       </button>
 

@@ -192,13 +192,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </header>
 
           {/* Page Content */}
-          <main className="flex-1 p-6 md:p-10 pb-24 md:pb-10 max-w-6xl w-full mx-auto">
+          <main className="flex-1 p-3 sm:p-6 md:p-10 pb-28 md:pb-10 max-w-6xl w-full mx-auto overflow-x-hidden">
             {children}
           </main>
         </div>
 
         {/* Mobile Bottom Navigation Bar */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#16060E]/95 backdrop-blur-2xl border-t border-rose-900/30 px-2 py-1.5 flex justify-around z-30 shadow-2xl overflow-x-auto">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#16060E]/95 backdrop-blur-2xl border-t border-rose-900/30 px-1.5 py-1.5 flex justify-around z-30 shadow-2xl overflow-x-auto scrollbar-none">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;

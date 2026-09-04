@@ -348,10 +348,10 @@ export default function SettingsPage() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex flex-wrap bg-wine-950/80 p-1.5 rounded-2xl border border-rose-500/20 gap-1">
+      <div className="flex overflow-x-auto scrollbar-none p-1.5 bg-wine-950/80 rounded-2xl border border-rose-500/20 gap-1.5 sm:flex-wrap">
         <button
           onClick={() => setActiveTab("profile")}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
+          className={`shrink-0 sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
             activeTab === "profile" ? "bg-rose-600 text-white shadow-glow" : "text-rose-300/70 hover:text-white"
           }`}
         >
@@ -361,7 +361,7 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab("relationship")}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
+          className={`shrink-0 sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
             activeTab === "relationship" ? "bg-rose-600 text-white shadow-glow" : "text-rose-300/70 hover:text-white"
           }`}
         >
@@ -371,7 +371,7 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab("notifications")}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
+          className={`shrink-0 sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
             activeTab === "notifications" ? "bg-rose-600 text-white shadow-glow" : "text-rose-300/70 hover:text-white"
           }`}
         >
@@ -381,7 +381,7 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab("appearance")}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
+          className={`shrink-0 sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
             activeTab === "appearance" ? "bg-rose-600 text-white shadow-glow" : "text-rose-300/70 hover:text-white"
           }`}
         >
@@ -391,7 +391,7 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab("privacy")}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
+          className={`shrink-0 sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
             activeTab === "privacy" ? "bg-rose-600 text-white shadow-glow" : "text-rose-300/70 hover:text-white"
           }`}
         >
@@ -401,7 +401,7 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab("export")}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
+          className={`shrink-0 sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
             activeTab === "export" ? "bg-rose-600 text-white shadow-glow" : "text-rose-300/70 hover:text-white"
           }`}
         >
@@ -412,15 +412,15 @@ export default function SettingsPage() {
 
       {/* --- 1. PROFILE SECTION --- */}
       {activeTab === "profile" && (
-        <div className="moi-card p-8 bg-wine-950/90 border border-rose-500/30 space-y-6 shadow-2xl">
+        <div className="moi-card p-4 sm:p-8 bg-wine-950/90 border border-rose-500/30 space-y-6 shadow-2xl overflow-hidden">
           <div className="flex items-center space-x-3 border-b border-rose-900/40 pb-4">
-            <User className="w-6 h-6 text-rose-400" />
+            <User className="w-6 h-6 text-rose-400 shrink-0" />
             <h2 className="text-lg font-bold text-white">Your Account Profile</h2>
           </div>
 
           <form onSubmit={handleSaveProfile} className="space-y-6">
             {/* Profile Picture Upload & Preview */}
-            <div className="flex items-center space-x-6">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 max-w-full overflow-hidden">
               <div className="relative w-20 h-20 rounded-full border-2 border-rose-500/40 overflow-hidden bg-wine-900/80 flex items-center justify-center text-rose-200 text-xl font-bold shadow-inner shrink-0">
                 {photoPreview ? (
                   <img src={photoPreview} alt={myName} className="w-full h-full object-cover" />
@@ -429,13 +429,15 @@ export default function SettingsPage() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <label className="px-4 py-2 rounded-xl bg-rose-900/60 hover:bg-rose-800 border border-rose-500/30 text-xs font-bold text-rose-200 inline-flex items-center space-x-2 cursor-pointer transition-colors">
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Choose New Avatar Photo</span>
+              <div className="space-y-2 max-w-full overflow-hidden">
+                <label className="px-4 py-2.5 rounded-xl bg-rose-900/60 hover:bg-rose-800 border border-rose-500/30 text-xs font-bold text-rose-200 inline-flex items-center space-x-2 cursor-pointer transition-colors max-w-full">
+                  <Upload className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Choose New Avatar Photo</span>
                   <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
                 </label>
-                <p className="text-[11px] text-rose-200/60">Uploads to Cloud Storage `users/{user.uid}/profilePhoto`.</p>
+                <p className="text-[11px] text-rose-200/60 break-all max-w-full">
+                  Uploads to Cloud Storage `users/{user.uid}/profilePhoto`.
+                </p>
               </div>
             </div>
 
@@ -468,17 +470,17 @@ export default function SettingsPage() {
           {/* Read-Only Partner Preview */}
           <div className="pt-6 border-t border-rose-900/40 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-rose-300/80">Paired Partner Confirmation</h3>
-            <div className="p-4 rounded-2xl bg-wine-900/40 border border-rose-500/20 flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-full border border-rose-400/40 overflow-hidden bg-rose-950 flex items-center justify-center text-rose-200 font-bold text-sm">
+            <div className="p-4 rounded-2xl bg-wine-900/40 border border-rose-500/20 flex items-center space-x-4 max-w-full overflow-hidden">
+              <div className="w-12 h-12 rounded-full border border-rose-400/40 overflow-hidden bg-rose-950 flex items-center justify-center text-rose-200 font-bold text-sm shrink-0">
                 {partnerProfile?.photoUrl ? (
                   <img src={partnerProfile.photoUrl} alt={partnerName} className="w-full h-full object-cover" />
                 ) : (
                   <span>{partnerName.slice(0, 2).toUpperCase()}</span>
                 )}
               </div>
-              <div>
-                <h4 className="text-sm font-bold text-white">{partnerName}</h4>
-                <p className="text-xs text-rose-200/60">{partnerProfile?.email || "Paired Partner"}</p>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-bold text-white truncate">{partnerName}</h4>
+                <p className="text-xs text-rose-200/60 truncate">{partnerProfile?.email || "Paired Partner"}</p>
               </div>
             </div>
           </div>
