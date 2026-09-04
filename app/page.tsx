@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { getDailyPromptForDate, DailyPrompt } from "@/lib/dailyPrompt";
 import CandleMode from "@/components/CandleMode";
-import NoticeBoardCanvas from "@/components/NoticeBoardCanvas";
 import MomentsStrip from "@/components/MomentsStrip";
 import { Heart, Calendar, Gamepad2, Sparkles, Lock, Layers, ArrowRight, CheckCircle2, Palette } from "lucide-react";
 import Link from "next/link";
@@ -221,8 +220,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Shared Couple Notice & Doodle Board */}
-      <NoticeBoardCanvas />
+// NoticeBoardCanvas removed from home screen per user request
 
       {/* Feature Navigation Cards Grid */}
       <div className="space-y-4">
