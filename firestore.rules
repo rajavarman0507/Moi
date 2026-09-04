@@ -83,6 +83,11 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
       }
 
+      // Explicit rules for Doodle Together subcollection items
+      match /doodleItems/{itemId} {
+        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      }
+
       // Explicit rules for Private Hub subcollections (letters, memories, pinConfig)
       match /privateHub/{document=**} {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));

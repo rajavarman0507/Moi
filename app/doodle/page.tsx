@@ -4,7 +4,18 @@ import React, { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { db, storage } from "@/lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  onSnapshot,
+  query,
+  limit,
+  writeBatch,
+  serverTimestamp,
+} from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import WaitingForPartner from "@/components/WaitingForPartner";
 import {
@@ -12,7 +23,7 @@ import {
   Eraser,
   Palette,
   RotateCcw,
-  Send,
+  Save,
   Sparkles,
   ArrowLeft,
   AlertTriangle,
@@ -24,8 +35,25 @@ import {
 import Link from "next/link";
 
 interface StrokePoint {
-  x: number;
-  y: number;
+  x: number; // Normalized 0..1
+  y: number; // Normalized 0..1
+}
+
+interface DoodleElement {
+  id: string;
+  type: "stroke" | "eraser" | "text" | "emoji";
+  points?: StrokePoint[];
+  color?: string;
+  width?: number;
+  text?: string;
+  emoji?: string;
+  x?: number; // Normalized 0..1
+  y?: number; // Normalized 0..1
+  textSize?: number;
+  emojiSize?: number;
+  authorUid?: string;
+  authorName?: string;
+  createdAt?: any;
 }
 
 const COLORS = ["#FB7185", "#FDE047", "#60A5FA", "#34D399", "#A78BFA", "#FFFFFF", "#000000"];
@@ -54,12 +82,12 @@ export default function DoodlePage() {
   const [textSize, setTextSize] = useState<number>(28);
 
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
+  const [elements, setElements] = useState<DoodleElement[]>([]);
   const [showClearConfirm, setShowClearConfirm] = useState<boolean>(false);
-  const [isSending, setIsSending] = useState<boolean>(false);
-  const [sendSuccess, setSendSuccess] = useState<boolean>(false);
+  const [isClearing, setIsClearing] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
 
-  // Canvas Action History Stack for Undo Functionality
-  const historyStack = useRef<ImageData[]>([]);
   const currentStrokePoints = useRef<StrokePoint[]>([]);
 
   const myName = userProfile?.displayName || userProfile?.email?.split("@")[0] || "You";
@@ -67,47 +95,95 @@ export default function DoodlePage() {
   const partnerUid = couple?.userIds.find((id) => id !== user?.uid);
   const coupleId = couple?.id;
 
-  // Initialize Canvas background & initial history state
-  useEffect(() => {
+  // Render all elements onto canvas
+  const renderAllElements = (els: DoodleElement[]) => {
     const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "#180611";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // Save initial blank canvas state
-        const initialState = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        historyStack.current = [initialState];
-      }
-    }
-  }, []);
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-  const saveCanvasState = () => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        const state = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        historyStack.current.push(state);
-        // Cap history stack to 30 items
-        if (historyStack.current.length > 30) {
-          historyStack.current.shift();
+    // Reset background
+    ctx.fillStyle = "#180611";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    els.forEach((el) => {
+      if ((el.type === "stroke" || el.type === "eraser") && el.points && el.points.length > 0) {
+        const isEraser = el.type === "eraser";
+        const strokeColor = isEraser ? "#180611" : (el.color || "#FB7185");
+        const strokeSize = isEraser ? (el.width || 24) : (el.width || 6);
+
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = strokeSize;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+
+        if (el.points.length === 1) {
+          const pt = el.points[0];
+          ctx.beginPath();
+          ctx.arc(pt.x * canvas.width, pt.y * canvas.height, strokeSize / 2, 0, Math.PI * 2);
+          ctx.fillStyle = strokeColor;
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(el.points[0].x * canvas.width, el.points[0].y * canvas.height);
+          for (let i = 1; i < el.points.length; i++) {
+            ctx.lineTo(el.points[i].x * canvas.width, el.points[i].y * canvas.height);
+          }
+          ctx.stroke();
         }
+      } else if (el.type === "text" && el.text && el.x !== undefined && el.y !== undefined) {
+        const posX = el.x * canvas.width;
+        const posY = el.y * canvas.height;
+        const size = el.textSize || 28;
+
+        ctx.font = `bold ${size}px sans-serif`;
+        ctx.fillStyle = el.color || "#FFFFFF";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(el.text, posX, posY);
+      } else if (el.type === "emoji" && el.emoji && el.x !== undefined && el.y !== undefined) {
+        const posX = el.x * canvas.width;
+        const posY = el.y * canvas.height;
+        const size = el.emojiSize || 36;
+
+        ctx.font = `${size}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(el.emoji, posX, posY);
       }
-    }
+    });
   };
 
-  const handleUndo = () => {
-    const canvas = canvasRef.current;
-    if (canvas && historyStack.current.length > 1) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        historyStack.current.pop(); // Remove current state
-        const prevState = historyStack.current[historyStack.current.length - 1];
-        ctx.putImageData(prevState, 0, 0);
-      }
-    }
-  };
+  // Real-time 2-Way Sync via Firestore Subcollection (couples/{coupleId}/doodleItems)
+  useEffect(() => {
+    if (!coupleId) return;
+
+    const itemsCollRef = collection(db, "couples", coupleId, "doodleItems");
+    const q = query(itemsCollRef, limit(300));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const loaded: DoodleElement[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as DoodleElement[];
+
+        // Sort chronologically in memory
+        loaded.sort((a, b) => {
+          const tA = a.createdAt?.seconds || a.createdAt?.toMillis?.() || 0;
+          const tB = b.createdAt?.seconds || b.createdAt?.toMillis?.() || 0;
+          return tA - tB;
+        });
+
+        setElements(loaded);
+        renderAllElements(loaded);
+      },
+      (err) => console.error("Doodle onSnapshot sync error:", err)
+    );
+
+    return () => unsubscribe();
+  }, [coupleId]);
 
   const getNormCoords = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -118,51 +194,50 @@ export default function DoodlePage() {
     return {
       normX: Math.max(0, Math.min(1, x)),
       normY: Math.max(0, Math.min(1, y)),
-      px: (clientX - rect.left) * (canvas.width / rect.width),
-      py: (clientY - rect.top) * (canvas.height / rect.height),
     };
   };
 
   const handleStart = (clientX: number, clientY: number) => {
     const coords = getNormCoords(clientX, clientY);
-    if (!coords) return;
+    if (!coords || !coupleId) return;
 
     if (activeTool === "emoji") {
-      // Stamp Emoji onto Canvas
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.font = `${emojiSize}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(selectedEmoji, coords.px, coords.py);
-          saveCanvasState();
-        }
-      }
+      // Stamp Emoji -> Push to Firestore for live 2-way sync!
+      const itemsCollRef = collection(db, "couples", coupleId, "doodleItems");
+      addDoc(itemsCollRef, {
+        type: "emoji",
+        emoji: selectedEmoji,
+        emojiSize,
+        x: coords.normX,
+        y: coords.normY,
+        authorUid: user?.uid,
+        authorName: myName,
+        createdAt: serverTimestamp(),
+      }).catch((err) => console.error("Error adding emoji item:", err));
       return;
     }
 
-    if (activeTool === "text") {
-      // Place Text Note onto Canvas
-      const canvas = canvasRef.current;
-      if (canvas && textInput.trim()) {
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.font = `bold ${textSize}px sans-serif`;
-          ctx.fillStyle = selectedColor;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(textInput.trim(), coords.px, coords.py);
-          saveCanvasState();
-        }
-      }
+    if (activeTool === "text" && textInput.trim()) {
+      // Place Text Note -> Push to Firestore for live 2-way sync!
+      const itemsCollRef = collection(db, "couples", coupleId, "doodleItems");
+      addDoc(itemsCollRef, {
+        type: "text",
+        text: textInput.trim(),
+        color: selectedColor,
+        textSize,
+        x: coords.normX,
+        y: coords.normY,
+        authorUid: user?.uid,
+        authorName: myName,
+        createdAt: serverTimestamp(),
+      }).catch((err) => console.error("Error adding text item:", err));
       return;
     }
 
-    // Freehand Draw / Erase
-    setIsDrawing(true);
-    currentStrokePoints.current = [{ x: coords.normX, y: coords.normY }];
+    if (activeTool === "draw" || activeTool === "erase") {
+      setIsDrawing(true);
+      currentStrokePoints.current = [{ x: coords.normX, y: coords.normY }];
+    }
   };
 
   const handleMove = (clientX: number, clientY: number) => {
@@ -172,6 +247,7 @@ export default function DoodlePage() {
 
     currentStrokePoints.current.push({ x: coords.normX, y: coords.normY });
 
+    // Temporary local preview while dragging
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
@@ -195,33 +271,72 @@ export default function DoodlePage() {
   };
 
   const handleEnd = () => {
-    if (isDrawing) {
-      setIsDrawing(false);
-      currentStrokePoints.current = [];
-      saveCanvasState();
+    if (!isDrawing || (activeTool !== "draw" && activeTool !== "erase")) return;
+    setIsDrawing(false);
+
+    if (currentStrokePoints.current.length > 0 && coupleId) {
+      const itemsCollRef = collection(db, "couples", coupleId, "doodleItems");
+      const isEraser = activeTool === "erase";
+
+      addDoc(itemsCollRef, {
+        type: isEraser ? "eraser" : "stroke",
+        points: currentStrokePoints.current,
+        color: isEraser ? "#180611" : selectedColor,
+        width: isEraser ? eraserWidth : lineWidth,
+        authorUid: user?.uid,
+        authorName: myName,
+        createdAt: serverTimestamp(),
+      }).catch((err) => console.error("Error adding stroke item:", err));
+    }
+
+    currentStrokePoints.current = [];
+  };
+
+  // Undo Action: Delete latest element from Firestore
+  const handleUndo = async () => {
+    if (!coupleId || elements.length === 0) return;
+    const lastElement = elements[elements.length - 1];
+    try {
+      const itemDocRef = doc(db, "couples", coupleId, "doodleItems", lastElement.id);
+      await deleteDoc(itemDocRef);
+    } catch (err) {
+      console.error("Error undoing doodle element:", err);
     }
   };
 
-  const handleClearCanvas = () => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "#180611";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const blankState = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        historyStack.current = [blankState];
+  // Chunked Batch Clear Board for Both Partners
+  const handleConfirmClearCanvas = async () => {
+    if (!coupleId) return;
+    setIsClearing(true);
+
+    try {
+      const itemsCollRef = collection(db, "couples", coupleId, "doodleItems");
+      const allDocsSnap = await getDocs(itemsCollRef);
+      const docSnaps = allDocsSnap.docs;
+
+      for (let i = 0; i < docSnaps.length; i += 400) {
+        const chunk = docSnaps.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
       }
+
+      setElements([]);
+      renderAllElements([]);
+    } catch (err) {
+      console.error("Error clearing doodle canvas:", err);
+    } finally {
+      setIsClearing(false);
+      setShowClearConfirm(false);
     }
-    setShowClearConfirm(false);
   };
 
-  // Send as Instant Sketch to Shared Moments & Trigger Notification
-  const handleSendInstantSketch = async () => {
+  // Save Canvas Action -> Saves to Sketches in Shared Moments
+  const handleSaveCanvas = async () => {
     const canvas = canvasRef.current;
-    if (!canvas || !coupleId || !partnerUid) return;
+    if (!canvas || !coupleId) return;
 
-    setIsSending(true);
+    setIsSaving(true);
 
     try {
       // 1. Convert Canvas to Blob
@@ -237,43 +352,45 @@ export default function DoodlePage() {
       await uploadBytes(storageRef, blob);
       const imageUrl = await getDownloadURL(storageRef);
 
-      // 3. Add to Shared Moments collection
+      // 3. Save to Shared Moments collection under type: "sketch"
       const momentsCollRef = collection(db, "couples", coupleId, "moments");
       await addDoc(momentsCollRef, {
         type: "sketch",
-        title: `${myName}'s Instant Sketch`,
+        title: `${myName}'s Saved Sketch`,
         imageUrl,
         authorName: myName,
         createdAt: serverTimestamp(),
       });
 
-      // 4. Send Firestore-Triggered Notification to Partner
-      const notifCollRef = collection(db, "couples", coupleId, "notifications");
-      await addDoc(notifCollRef, {
-        toUserId: partnerUid,
-        type: "sketch",
-        title: `${myName} sent an Instant Sketch! 🎨`,
-        body: "Click to view your new doodle in Shared Moments.",
-        imageUrl,
-        createdAt: serverTimestamp(),
-        read: false,
-      });
+      // 4. Send Notification if partner exists
+      if (partnerUid) {
+        const notifCollRef = collection(db, "couples", coupleId, "notifications");
+        await addDoc(notifCollRef, {
+          toUserId: partnerUid,
+          type: "sketch",
+          title: `${myName} saved a new Doodle Sketch! 🎨`,
+          body: "View it in your Shared Moments gallery under Sketches.",
+          imageUrl,
+          createdAt: serverTimestamp(),
+          read: false,
+        });
+      }
 
-      setSendSuccess(true);
+      setSaveSuccess(true);
       setTimeout(() => {
         router.push("/moments");
-      }, 1500);
+      }, 1200);
     } catch (err) {
-      console.error("Error sending instant sketch:", err);
+      console.error("Error saving canvas:", err);
     } finally {
-      setIsSending(false);
+      setIsSaving(false);
     }
   };
 
   if (loading || !user || !couple) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-rose-300">
-        <p className="font-medium animate-pulse">Loading Doodle Studio...</p>
+        <p className="font-medium animate-pulse">Loading Live Sync Doodle Studio...</p>
       </div>
     );
   }
@@ -292,7 +409,7 @@ export default function DoodlePage() {
 
           <div className="px-3 py-1 rounded-full bg-rose-500/20 border border-rose-400/30 text-xs font-bold text-rose-200 flex items-center space-x-1.5">
             <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-            <span>Doodle Studio & Instant Sketch</span>
+            <span>Live 2-Way Sync Doodle Studio</span>
           </div>
         </div>
 
@@ -308,7 +425,7 @@ export default function DoodlePage() {
               {/* Undo Action Button */}
               <button
                 onClick={handleUndo}
-                disabled={historyStack.current.length <= 1}
+                disabled={elements.length === 0}
                 className="px-3 py-1.5 rounded-xl bg-wine-900/80 hover:bg-wine-800 border border-rose-500/30 text-xs font-bold text-rose-200 flex items-center space-x-1.5 transition-all disabled:opacity-40"
                 title="Undo last action"
               >
@@ -327,7 +444,7 @@ export default function DoodlePage() {
             </div>
           </div>
 
-          {/* Interactive HTML5 Canvas */}
+          {/* Interactive Live Synchronized HTML5 Canvas */}
           <div className="relative w-full aspect-video bg-[#180611] rounded-2xl border border-rose-500/30 overflow-hidden shadow-inner touch-none">
             <canvas
               ref={canvasRef}
@@ -400,14 +517,14 @@ export default function DoodlePage() {
                 </button>
               </div>
 
-              {/* Send Instant Sketch Button */}
+              {/* Save Canvas Button */}
               <button
-                onClick={handleSendInstantSketch}
-                disabled={isSending || sendSuccess}
+                onClick={handleSaveCanvas}
+                disabled={isSaving || saveSuccess}
                 className="moi-button-primary px-6 py-2.5 text-xs font-extrabold flex items-center space-x-2 shrink-0"
               >
-                <Send className="w-4 h-4" />
-                <span>{isSending ? "Uploading Sketch..." : sendSuccess ? "Sent to Moments! 🎉" : `Send to ${partnerName}`}</span>
+                <Save className="w-4 h-4 text-amber-300" />
+                <span>{isSaving ? "Saving Canvas..." : saveSuccess ? "Saved to Sketches! 🎉" : "Save Canvas"}</span>
               </button>
             </div>
 
@@ -465,7 +582,7 @@ export default function DoodlePage() {
             {activeTool === "emoji" && (
               <div className="space-y-3 pt-2 border-t border-rose-900/40">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-300">Click anywhere on canvas to stamp emoji:</span>
+                  <span className="text-xs font-bold text-amber-300">Click anywhere on canvas to stamp emoji (syncs live):</span>
                   <div className="flex items-center space-x-2">
                     <span className="text-xs text-rose-300 font-semibold">Emoji Size:</span>
                     <input
@@ -538,7 +655,7 @@ export default function DoodlePage() {
                 </div>
 
                 <p className="text-[11px] text-rose-300/70 font-semibold">
-                  Click anywhere on the canvas to place your text note.
+                  Click anywhere on the canvas to place your text note (syncs live to both partners).
                 </p>
               </div>
             )}
@@ -554,11 +671,13 @@ export default function DoodlePage() {
               </div>
               <div className="space-y-1">
                 <h4 className="text-base font-bold text-white">Clear Canvas?</h4>
-                <p className="text-xs text-rose-200/70">This will erase your current drawing. This cannot be undone.</p>
+                <p className="text-xs text-rose-200/70">This will erase all doodles, notes, and emojis for both of you. This cannot be undone.</p>
               </div>
               <div className="flex justify-end space-x-3 pt-2">
                 <button onClick={() => setShowClearConfirm(false)} className="px-4 py-2 text-xs font-bold text-rose-300/70 hover:text-white">Cancel</button>
-                <button onClick={handleClearCanvas} className="moi-button-primary px-5 py-2 text-xs font-extrabold">Confirm Clear</button>
+                <button onClick={handleConfirmClearCanvas} disabled={isClearing} className="moi-button-primary px-5 py-2 text-xs font-extrabold">
+                  {isClearing ? "Clearing..." : "Confirm Clear"}
+                </button>
               </div>
             </div>
           </div>
