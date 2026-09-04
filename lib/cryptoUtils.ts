@@ -75,8 +75,8 @@ export async function derivePbkdf2Hash(pin: string, saltHex: string): Promise<st
   return uint8ArrayToHex(new Uint8Array(derivedBits));
 }
 
-// Derive AES-GCM 256-bit CryptoKey for Letter Encryption/Decryption
-async function deriveAesGcmKey(pin: string, saltHex: string): Promise<CryptoKey> {
+// Derive AES-GCM 256-bit CryptoKey for Fast In-Memory Chat & Letter Encryption/Decryption
+export async function deriveAesGcmKeyFromPin(pin: string, saltHex: string): Promise<CryptoKey> {
   const baseKey = await getPbkdf2Key(pin);
   const salt = hexToUint8Array(saltHex);
 
@@ -94,13 +94,11 @@ async function deriveAesGcmKey(pin: string, saltHex: string): Promise<CryptoKey>
   );
 }
 
-// Encrypt Letter Text -> AES-GCM 256-bit Base64 Ciphertext + IV Hex
-export async function encryptLetter(
+// Fast Instant (<1ms) Encryption using Pre-Derived CryptoKey
+export async function encryptWithKey(
   plainText: string,
-  pin: string,
-  saltHex: string
+  key: CryptoKey
 ): Promise<{ cipherText: string; ivHex: string }> {
-  const key = await deriveAesGcmKey(pin, saltHex);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoder = new TextEncoder();
 
@@ -116,14 +114,12 @@ export async function encryptLetter(
   return { cipherText, ivHex };
 }
 
-// Decrypt Base64 Ciphertext -> Original Plaintext Letter
-export async function decryptLetter(
+// Fast Instant (<1ms) Decryption using Pre-Derived CryptoKey
+export async function decryptWithKey(
   cipherText: string,
   ivHex: string,
-  pin: string,
-  saltHex: string
+  key: CryptoKey
 ): Promise<string> {
-  const key = await deriveAesGcmKey(pin, saltHex);
   const iv = hexToUint8Array(ivHex);
 
   const binaryString = atob(cipherText);
@@ -140,6 +136,27 @@ export async function decryptLetter(
 
   const decoder = new TextDecoder();
   return decoder.decode(decryptedBuffer);
+}
+
+// Encrypt Letter Text -> AES-GCM 256-bit Base64 Ciphertext + IV Hex
+export async function encryptLetter(
+  plainText: string,
+  pin: string,
+  saltHex: string
+): Promise<{ cipherText: string; ivHex: string }> {
+  const key = await deriveAesGcmKeyFromPin(pin, saltHex);
+  return encryptWithKey(plainText, key);
+}
+
+// Decrypt Base64 Ciphertext -> Original Plaintext Letter
+export async function decryptLetter(
+  cipherText: string,
+  ivHex: string,
+  pin: string,
+  saltHex: string
+): Promise<string> {
+  const key = await deriveAesGcmKeyFromPin(pin, saltHex);
+  return decryptWithKey(cipherText, ivHex, key);
 }
 
 // ATOMIC PIN CHANGE & LETTER RE-ENCRYPTION PIPELINE WITH ROLLBACK GUARANTEE
@@ -166,6 +183,9 @@ export async function reencryptAllLettersAtomic(
     throw new Error("Current PIN is incorrect.");
   }
 
+  // Derive keys once for old & new PIN
+  const oldKey = await deriveAesGcmKeyFromPin(oldPin, oldSalt);
+
   // 2. Fetch All Existing Letters
   const lettersCollRef = collection(db, "couples", coupleId, "privateHub", "letters", "items");
   const lettersSnap = await getDocs(lettersCollRef);
@@ -178,7 +198,7 @@ export async function reencryptAllLettersAtomic(
   const decryptedItems: { id: string; plainText: string; authorName: string; dateStr: string }[] = [];
   for (let i = 0; i < letterDocs.length; i++) {
     const docData = letterDocs[i].data();
-    const plainText = await decryptLetter(docData.cipherText, docData.ivHex, oldPin, oldSalt);
+    const plainText = await decryptWithKey(docData.cipherText, docData.ivHex, oldKey);
     decryptedItems.push({
       id: letterDocs[i].id,
       plainText,
@@ -191,11 +211,12 @@ export async function reencryptAllLettersAtomic(
   // 4. IN-MEMORY RE-ENCRYPTION STEP (With New Salt & New Derived Key)
   const newSalt = generateSaltHex();
   const newHash = await derivePbkdf2Hash(newPin, newSalt);
+  const newKey = await deriveAesGcmKeyFromPin(newPin, newSalt);
 
   const reencryptedPayloads: { id: string; cipherText: string; ivHex: string; authorName: string; dateStr: string }[] = [];
   for (let i = 0; i < decryptedItems.length; i++) {
     const item = decryptedItems[i];
-    const { cipherText, ivHex } = await encryptLetter(item.plainText, newPin, newSalt);
+    const { cipherText, ivHex } = await encryptWithKey(item.plainText, newKey);
     reencryptedPayloads.push({
       id: item.id,
       cipherText,
@@ -238,11 +259,15 @@ export async function reencryptAllLettersAtomic(
   }
 
   // 7. Update pinConfig to New Salt & New PBKDF2 Hash
-  await setDoc(pinConfigRef, {
-    pbkdf2Hash: newHash,
-    salt: newSalt,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  await setDoc(
+    pinConfigRef,
+    {
+      pbkdf2Hash: newHash,
+      salt: newSalt,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   console.log("Atomic PIN change and letter re-encryption completed successfully.");
   return { newSalt, newHash };

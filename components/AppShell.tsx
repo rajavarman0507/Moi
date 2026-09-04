@@ -23,6 +23,7 @@ import {
   Settings,
   LogOut,
   User as UserIcon,
+  MessageCircle,
 } from "lucide-react";
 
 interface NavItem {
@@ -33,6 +34,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: "Home", href: "/", icon: Home },
+  { name: "Chat", href: "/chat", icon: MessageCircle },
   { name: "Doodle", href: "/doodle", icon: Palette },
   { name: "Moments", href: "/moments", icon: ImageIcon },
   { name: "Games", href: "/games", icon: Gamepad2 },

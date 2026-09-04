@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { ChatProvider } from "@/context/ChatContext";
 import AppShell from "@/components/AppShell";
 import PwaRegister from "@/components/PwaRegister";
 import SparklingHearts from "@/components/SparklingHearts";
@@ -33,9 +34,11 @@ export default function RootLayout({
         <SparklingHearts />
         <AuthProvider>
           <ThemeProvider>
-            <AppShell>
-              {children}
-            </AppShell>
+            <ChatProvider>
+              <AppShell>
+                {children}
+              </AppShell>
+            </ChatProvider>
           </ThemeProvider>
         </AuthProvider>
         <PwaRegister />

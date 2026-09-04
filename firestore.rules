@@ -88,6 +88,23 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
       }
 
+      // Explicit rules for Encrypted Chat Messages subcollection
+      match /chat/messages/{messageId} {
+        allow read, delete: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+        allow create: if isAuthenticated() 
+                      && isPartnerInCouple(getCoupleData(coupleId)) 
+                      && request.resource.data.senderUid == request.auth.uid;
+        allow update: if isAuthenticated() 
+                      && isPartnerInCouple(getCoupleData(coupleId)) 
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'delivered', 'updatedAt']);
+      }
+
+      // Explicit rules for Chat Typing indicator subcollection
+      match /chat/typing/{userId} {
+        allow read: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+        allow write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId)) && request.auth.uid == userId;
+      }
+
       // Explicit rules for Private Hub subcollections (letters, memories, pinConfig)
       match /privateHub/{document=**} {
         allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
