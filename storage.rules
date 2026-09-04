@@ -23,5 +23,11 @@ service firebase.storage {
       allow create: if isAuthenticated() && request.auth.uid == userId;
       allow read, update, delete: if false;
     }
+
+    // Cloud Storage Rules for User Profile Photos: User can upload to their own folder, authenticated partners can read
+    match /users/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
   }
 }

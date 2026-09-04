@@ -118,13 +118,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     } else {
                       setCouple(coupleData);
 
-                      // Find partner ID and fetch profile
+                      // Find partner ID and subscribe to partner profile in real-time
                       const partnerId = coupleData.userIds.find((id) => id !== firebaseUser.uid);
                       if (partnerId) {
-                        const partnerSnap = await getDoc(doc(db, "users", partnerId));
-                        if (partnerSnap.exists()) {
-                          setPartnerProfile(partnerSnap.data() as UserProfile);
-                        }
+                        onSnapshot(doc(db, "users", partnerId), (partnerSnap) => {
+                          if (partnerSnap.exists()) {
+                            setPartnerProfile(partnerSnap.data() as UserProfile);
+                          }
+                        });
                       }
                     }
                   } else {

@@ -124,10 +124,12 @@ export default function SettingsPage() {
       const userRef = doc(db, "users", user.uid);
       await setDoc(userRef, { displayName: displayName.trim(), photoUrl }, { merge: true });
 
+      setPhotoPreview(photoUrl);
+      setProfilePhoto(null);
       setProfileMsg("Profile updated successfully!");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error updating profile:", err);
-      setProfileMsg("Failed to update profile.");
+      setProfileMsg(err.message || "Failed to update profile.");
     } finally {
       setIsSavingProfile(false);
     }
