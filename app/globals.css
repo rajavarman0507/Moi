@@ -29,10 +29,17 @@ textarea:-webkit-autofill:active {
   caret-color: #FB7185;
 }
 
-input, textarea {
+input, textarea, select {
   color: #FFFFFF !important;
+  background-color: rgba(27, 7, 16, 0.85) !important;
   caret-color: #FB7185;
 }
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(251, 113, 133, 0.5) !important;
+}
+
 
 /* Glassmorphism Dark Love Theme Cards */
 .moi-card {
