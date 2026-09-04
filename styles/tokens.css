@@ -22,7 +22,7 @@
 }
 
 html.light {
-  /* Soft Rose Light Color Palette */
+  /* Soft Rose Light Theme Color Palette */
   --color-bg-dark: #FFF0F5;
   --color-wine-950: #FFEAF2;
   --color-wine-900: #FFD6E5;
@@ -36,8 +36,8 @@ html.light {
   --color-rose-200: #881337;
   --color-rose-100: #4C0519;
 
-  --color-gold-300: #D97706;
-  --color-gold-200: #B45309;
+  --color-gold-300: #9F1239;
+  --color-gold-200: #881337;
 
   /* Soft Rose Light Glassmorphism Shadows */
   --shadow-dark-card: 0 10px 30px -5px rgba(225, 29, 72, 0.12), 0 0 15px rgba(255, 182, 193, 0.4);

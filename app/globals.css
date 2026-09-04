@@ -112,28 +112,41 @@ input, textarea {
 /* ==========================================================================
    SOFT ROSE LIGHT THEME OVERRIDES (html.light)
    ========================================================================== */
-html.light body {
+
+/* 1. Global Page Backgrounds in Light Mode */
+html.light,
+html.light body,
+html.light main,
+html.light #__next,
+html.light [class*="min-h-screen"] {
   background-color: #FFF0F5 !important;
-  color: #4C0519 !important;
+  background-image: linear-gradient(180deg, #FFF0F5 0%, #FFE4EC 100%) !important;
+  color: #3D0B1B !important;
 }
 
-/* Light Mode Glassmorphism Cards */
+/* 2. Light Mode Glassmorphism Cards */
 html.light .moi-card {
-  background: rgba(255, 255, 255, 0.88) !important;
-  border-color: rgba(225, 29, 72, 0.2) !important;
-  box-shadow: 0 10px 30px -5px rgba(225, 29, 72, 0.12), 0 0 15px rgba(255, 182, 193, 0.3) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(225, 29, 72, 0.18) !important;
+  box-shadow: 0 10px 30px -5px rgba(225, 29, 72, 0.1), 0 0 20px rgba(255, 182, 193, 0.3) !important;
+  color: #3D0B1B !important;
 }
 
 html.light .moi-card:hover {
-  border-color: rgba(225, 29, 72, 0.4) !important;
-  box-shadow: 0 15px 40px -5px rgba(225, 29, 72, 0.2) !important;
+  border-color: rgba(225, 29, 72, 0.35) !important;
+  box-shadow: 0 15px 40px -5px rgba(225, 29, 72, 0.18) !important;
 }
 
-/* Light Mode Primary & Secondary Buttons */
+/* 3. Light Mode Primary & Secondary Buttons */
 html.light .moi-button-primary {
   background: linear-gradient(135deg, #E11D48 0%, #BE123C 100%) !important;
   color: #FFFFFF !important;
   box-shadow: 0 4px 18px rgba(225, 29, 72, 0.3) !important;
+}
+
+html.light .moi-button-primary span,
+html.light .moi-button-primary svg {
+  color: #FFFFFF !important;
 }
 
 html.light .moi-button-secondary {
@@ -148,8 +161,33 @@ html.light .moi-button-secondary:hover {
   color: #4C0519 !important;
 }
 
-/* Background Overrides for Dark Hex Classes in Soft Rose Light Mode */
-html.light aside,
+/* 4. Desktop Sidebar & Mobile Nav in Light Mode */
+html.light aside {
+  background-color: #FFFFFF !important;
+  border-right-color: rgba(225, 29, 72, 0.15) !important;
+  box-shadow: 0 0 30px rgba(225, 29, 72, 0.08) !important;
+}
+
+html.light nav a {
+  color: #5D1A3C !important;
+}
+
+html.light nav a:hover {
+  background-color: rgba(225, 29, 72, 0.08) !important;
+  color: #BE123C !important;
+}
+
+html.light nav a[class*="bg-gradient-to-r"] {
+  background: linear-gradient(135deg, #E11D48 0%, #BE123C 100%) !important;
+  color: #FFFFFF !important;
+}
+
+html.light nav a[class*="bg-gradient-to-r"] span,
+html.light nav a[class*="bg-gradient-to-r"] svg {
+  color: #FFFFFF !important;
+}
+
+/* 5. Background Container Overrides for Dark Hexes in Light Mode */
 html.light [class*="bg-[#12040A]"],
 html.light [class*="bg-[#16060E]"],
 html.light [class*="bg-[#0D0308]"],
@@ -158,22 +196,26 @@ html.light [class*="bg-[#1E0613]"],
 html.light [class*="bg-[#210915]"],
 html.light [class*="bg-[#290B1B]"],
 html.light [class*="bg-[#2B0A1A]"],
+html.light [class*="bg-[#270B18]"],
+html.light [class*="bg-[#3B1124]"],
+html.light [class*="bg-[#1D0612]"],
+html.light [class*="bg-[#240A17]"],
+html.light [class*="bg-[#350F22]"],
+html.light [class*="bg-[#190510]"],
 html.light [class*="bg-wine-950"],
 html.light [class*="bg-wine-900"],
 html.light [class*="bg-wine-800"] {
   background-color: #FFF0F5 !important;
 }
 
-html.light [class*="bg-wine-950/"],
-html.light [class*="bg-wine-900/"],
-html.light [class*="bg-wine-800/"],
-html.light [class*="bg-[#16060E]/"],
-html.light [class*="bg-[#1B0710]/"],
-html.light [class*="bg-[#290B1B]/"] {
-  background-color: rgba(255, 240, 245, 0.92) !important;
+html.light [class*="bg-rose-950"],
+html.light [class*="bg-rose-900"] {
+  background-color: rgba(255, 228, 236, 0.95) !important;
+  color: #5C1229 !important;
+  border-color: rgba(225, 29, 72, 0.25) !important;
 }
 
-/* Typography & Headings in Light Mode */
+/* 6. Typography & Text Contrast Overrides in Light Mode */
 html.light h1,
 html.light h2,
 html.light h3,
@@ -182,11 +224,11 @@ html.light h5,
 html.light h6,
 html.light [class*="text-white"],
 html.light [class*="text-rose-100"] {
-  color: #2D0B16 !important;
+  color: #2D0A15 !important;
 }
 
 html.light [class*="text-rose-200"] {
-  color: #4C0519 !important;
+  color: #4C0B1E !important;
 }
 
 html.light [class*="text-rose-300"] {
@@ -200,14 +242,33 @@ html.light [class*="text-rose-400"] {
 html.light [class*="text-rose-300/"],
 html.light [class*="text-rose-200/"],
 html.light [class*="text-rose-100/"] {
-  color: rgba(76, 5, 25, 0.75) !important;
+  color: rgba(76, 11, 30, 0.8) !important;
 }
 
-/* Form Inputs, Selects, & Textareas in Light Mode */
+/* 7. Yellow & Amber Text Overrides (Fixes Invisible Gold/Yellow Text) */
+html.light [class*="text-amber-200"],
+html.light [class*="text-amber-300"],
+html.light [class*="text-amber-400"],
+html.light [class*="text-gold-200"],
+html.light [class*="text-gold-300"],
+html.light [class*="text-yellow-200"],
+html.light [class*="text-yellow-300"],
+html.light [class*="text-yellow-400"] {
+  color: #9F1239 !important; /* High contrast crimson maroon */
+}
+
+/* 8. Transparent Text Gradient (Fixes 279 Days Counter) */
+html.light [class*="bg-clip-text"] {
+  background-image: linear-gradient(135deg, #BE123C 0%, #E11D48 50%, #881337 100%) !important;
+  -webkit-background-clip: text !important;
+  color: transparent !important;
+}
+
+/* 9. Form Inputs, Selects, & Textareas in Light Mode */
 html.light input,
 html.light textarea,
 html.light select {
-  color: #2D0B16 !important;
+  color: #2D0A15 !important;
   background-color: #FFFFFF !important;
   border-color: rgba(225, 29, 72, 0.3) !important;
 }
@@ -222,18 +283,18 @@ html.light input:-webkit-autofill:hover,
 html.light input:-webkit-autofill:focus, 
 html.light input:-webkit-autofill:active,
 html.light textarea:-webkit-autofill {
-  -webkit-text-fill-color: #2D0B16 !important;
+  -webkit-text-fill-color: #2D0A15 !important;
   -webkit-box-shadow: 0 0 0px 1000px #FFF0F5 inset !important;
 }
 
-/* Borders in Light Mode */
+/* 10. Borders in Light Mode */
 html.light [class*="border-rose-500/"],
 html.light [class*="border-rose-400/"],
 html.light [class*="border-rose-900/"] {
   border-color: rgba(225, 29, 72, 0.25) !important;
 }
 
-/* Light Mode Scrollbars */
+/* 11. Light Mode Scrollbars */
 html.light ::-webkit-scrollbar-track {
   background: #FFE4EC !important;
 }
