@@ -97,61 +97,59 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <MusicMiniPlayer />
 
         {/* Desktop Left Sidebar */}
-        <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-[#16060E]/85 backdrop-blur-xl border-r border-rose-900/30 p-6 z-20 justify-between shadow-2xl">
-          <div className="space-y-6">
-            {/* Logo & Brand Header */}
-            <div className="flex items-center space-x-3 px-2">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-wine-600 to-rose-400 flex items-center justify-center text-white font-bold text-xl shadow-glow">
-                <Heart className="w-5 h-5 fill-white text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-extrabold tracking-tight text-white flex items-center gap-1.5">
-                  <span>Moi</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-normal">♥</span>
-                </h1>
-                <p className="text-xs text-rose-300/70 font-medium">Private Couple Space</p>
-              </div>
+        <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-[#16060E]/85 backdrop-blur-xl border-r border-rose-900/30 p-5 z-20 justify-between shadow-2xl overflow-hidden">
+          {/* Logo & Brand Header */}
+          <div className="flex items-center space-x-3 px-2 pb-2 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 via-wine-600 to-rose-400 flex items-center justify-center text-white font-bold text-xl shadow-glow">
+              <Heart className="w-5 h-5 fill-white text-white" />
             </div>
-
-            {/* Navigation Items */}
-            <nav className="space-y-1.5">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href;
-                const partnerHere = isPartnerOnItem(item.href);
-
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-sm font-medium transition-all ${
-                      isActive
-                        ? "bg-gradient-to-r from-rose-900/60 to-wine-800/80 text-white border border-rose-500/30 shadow-glow"
-                        : "text-rose-200/70 hover:bg-rose-950/40 hover:text-white"
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <Icon className={`w-4 h-4 ${isActive ? "text-rose-400" : "text-rose-300/60"}`} />
-                      <span>{item.name}</span>
-                    </div>
-
-                    {/* Partner Blinking Green Heart Badge */}
-                    {partnerHere && (
-                      <span
-                        className="text-xs animate-bounce"
-                        title={`${partnerName} is viewing this page`}
-                      >
-                        💚
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </nav>
+            <div>
+              <h1 className="text-xl font-extrabold tracking-tight text-white flex items-center gap-1.5">
+                <span>Moi</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-normal">♥</span>
+              </h1>
+              <p className="text-xs text-rose-300/70 font-medium">Private Couple Space</p>
+            </div>
           </div>
 
+          {/* Scrollable Navigation Items */}
+          <nav className="flex-1 overflow-y-auto pr-1 space-y-1 my-2 scrollbar-thin">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              const partnerHere = isPartnerOnItem(item.href);
+
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`flex items-center justify-between px-3 py-2 rounded-2xl text-xs font-medium transition-all ${
+                    isActive
+                      ? "bg-gradient-to-r from-rose-900/60 to-wine-800/80 text-white border border-rose-500/30 shadow-glow"
+                      : "text-rose-200/70 hover:bg-rose-950/40 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <Icon className={`w-4 h-4 ${isActive ? "text-rose-400" : "text-rose-300/60"}`} />
+                    <span>{item.name}</span>
+                  </div>
+
+                  {/* Partner Blinking Green Heart Badge */}
+                  {partnerHere && (
+                    <span
+                      className="text-xs animate-bounce"
+                      title={`${partnerName} is viewing this page`}
+                    >
+                      💚
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+
           {/* User Info & Logout */}
-          <div className="pt-3 border-t border-rose-900/30 space-y-2">
+          <div className="pt-3 border-t border-rose-900/30 space-y-2 shrink-0">
             {userProfile && (
               <div className="flex items-center space-x-3 px-2 py-1">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-500 to-wine-700 text-white flex items-center justify-center font-semibold text-xs shadow-sm border border-rose-400/30 overflow-hidden">
