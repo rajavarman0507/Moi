@@ -1,5 +1,5 @@
 :root {
-  /* Rich Dark Romantic / Love Color Palette */
+  /* Rich Dark Romantic / Love Color Palette (Default Dark Theme) */
   --color-bg-dark: #12040A;
   --color-wine-950: #1B0710;
   --color-wine-900: #2C0B1B;
@@ -19,4 +19,27 @@
   /* Glassmorphism Dark Card & Glowing Shadows */
   --shadow-dark-card: 0 10px 40px -10px rgba(0, 0, 0, 0.7), 0 0 20px rgba(225, 29, 72, 0.15);
   --shadow-glow: 0 0 25px rgba(225, 29, 72, 0.35);
+}
+
+html.light {
+  /* Soft Rose Light Color Palette */
+  --color-bg-dark: #FFF0F5;
+  --color-wine-950: #FFEAF2;
+  --color-wine-900: #FFD6E5;
+  --color-wine-800: #FFB8D1;
+  --color-wine-700: #E11D48;
+  --color-wine-600: #BE123C;
+
+  --color-rose-500: #E11D48;
+  --color-rose-400: #E11D48;
+  --color-rose-300: #BE123C;
+  --color-rose-200: #881337;
+  --color-rose-100: #4C0519;
+
+  --color-gold-300: #D97706;
+  --color-gold-200: #B45309;
+
+  /* Soft Rose Light Glassmorphism Shadows */
+  --shadow-dark-card: 0 10px 30px -5px rgba(225, 29, 72, 0.12), 0 0 15px rgba(255, 182, 193, 0.4);
+  --shadow-glow: 0 0 20px rgba(225, 29, 72, 0.25);
 }

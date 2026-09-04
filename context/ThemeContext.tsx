@@ -29,18 +29,28 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeState(savedTheme);
   }, [userProfile]);
 
-  // 2. Apply theme class to document element
+  // 2. Apply theme class to document element and listen for system color scheme changes
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.remove("light", "dark");
 
-    let activeTheme = theme;
-    if (theme === "system") {
-      activeTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
+    const applyTheme = () => {
+      root.classList.remove("light", "dark");
+      let activeTheme = theme;
+      if (theme === "system") {
+        activeTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      root.classList.add(activeTheme);
+    };
 
-    root.classList.add(activeTheme);
+    applyTheme();
     localStorage.setItem("moi_theme", theme);
+
+    if (theme === "system") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const handleChange = () => applyTheme();
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
   }, [theme]);
 
   // 3. Set theme state & persist to Firestore

@@ -11,6 +11,7 @@ body {
   min-height: 100vh;
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Chrome / Safari / WebKit Autofill Input Visibility Overrides */
@@ -106,4 +107,137 @@ input, textarea {
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(225, 29, 72, 0.4) rgba(23, 6, 16, 0.8);
+}
+
+/* ==========================================================================
+   SOFT ROSE LIGHT THEME OVERRIDES (html.light)
+   ========================================================================== */
+html.light body {
+  background-color: #FFF0F5 !important;
+  color: #4C0519 !important;
+}
+
+/* Light Mode Glassmorphism Cards */
+html.light .moi-card {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border-color: rgba(225, 29, 72, 0.2) !important;
+  box-shadow: 0 10px 30px -5px rgba(225, 29, 72, 0.12), 0 0 15px rgba(255, 182, 193, 0.3) !important;
+}
+
+html.light .moi-card:hover {
+  border-color: rgba(225, 29, 72, 0.4) !important;
+  box-shadow: 0 15px 40px -5px rgba(225, 29, 72, 0.2) !important;
+}
+
+/* Light Mode Primary & Secondary Buttons */
+html.light .moi-button-primary {
+  background: linear-gradient(135deg, #E11D48 0%, #BE123C 100%) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 4px 18px rgba(225, 29, 72, 0.3) !important;
+}
+
+html.light .moi-button-secondary {
+  background: rgba(255, 228, 236, 0.9) !important;
+  color: #881337 !important;
+  border-color: rgba(225, 29, 72, 0.3) !important;
+}
+
+html.light .moi-button-secondary:hover {
+  background: rgba(255, 204, 219, 0.95) !important;
+  border-color: rgba(225, 29, 72, 0.5) !important;
+  color: #4C0519 !important;
+}
+
+/* Background Overrides for Dark Hex Classes in Soft Rose Light Mode */
+html.light aside,
+html.light [class*="bg-[#12040A]"],
+html.light [class*="bg-[#16060E]"],
+html.light [class*="bg-[#0D0308]"],
+html.light [class*="bg-[#1B0710]"],
+html.light [class*="bg-[#1E0613]"],
+html.light [class*="bg-[#210915]"],
+html.light [class*="bg-[#290B1B]"],
+html.light [class*="bg-[#2B0A1A]"],
+html.light [class*="bg-wine-950"],
+html.light [class*="bg-wine-900"],
+html.light [class*="bg-wine-800"] {
+  background-color: #FFF0F5 !important;
+}
+
+html.light [class*="bg-wine-950/"],
+html.light [class*="bg-wine-900/"],
+html.light [class*="bg-wine-800/"],
+html.light [class*="bg-[#16060E]/"],
+html.light [class*="bg-[#1B0710]/"],
+html.light [class*="bg-[#290B1B]/"] {
+  background-color: rgba(255, 240, 245, 0.92) !important;
+}
+
+/* Typography & Headings in Light Mode */
+html.light h1,
+html.light h2,
+html.light h3,
+html.light h4,
+html.light h5,
+html.light h6,
+html.light [class*="text-white"],
+html.light [class*="text-rose-100"] {
+  color: #2D0B16 !important;
+}
+
+html.light [class*="text-rose-200"] {
+  color: #4C0519 !important;
+}
+
+html.light [class*="text-rose-300"] {
+  color: #881337 !important;
+}
+
+html.light [class*="text-rose-400"] {
+  color: #BE123C !important;
+}
+
+html.light [class*="text-rose-300/"],
+html.light [class*="text-rose-200/"],
+html.light [class*="text-rose-100/"] {
+  color: rgba(76, 5, 25, 0.75) !important;
+}
+
+/* Form Inputs, Selects, & Textareas in Light Mode */
+html.light input,
+html.light textarea,
+html.light select {
+  color: #2D0B16 !important;
+  background-color: #FFFFFF !important;
+  border-color: rgba(225, 29, 72, 0.3) !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: rgba(136, 19, 55, 0.5) !important;
+}
+
+html.light input:-webkit-autofill,
+html.light input:-webkit-autofill:hover, 
+html.light input:-webkit-autofill:focus, 
+html.light input:-webkit-autofill:active,
+html.light textarea:-webkit-autofill {
+  -webkit-text-fill-color: #2D0B16 !important;
+  -webkit-box-shadow: 0 0 0px 1000px #FFF0F5 inset !important;
+}
+
+/* Borders in Light Mode */
+html.light [class*="border-rose-500/"],
+html.light [class*="border-rose-400/"],
+html.light [class*="border-rose-900/"] {
+  border-color: rgba(225, 29, 72, 0.25) !important;
+}
+
+/* Light Mode Scrollbars */
+html.light ::-webkit-scrollbar-track {
+  background: #FFE4EC !important;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: rgba(225, 29, 72, 0.4) !important;
 }
