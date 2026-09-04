@@ -36,7 +36,7 @@ export default function SparklingHearts() {
     }
   }, [theme]);
 
-  // 2. Generate 60 dense particles for a vibrant floating heart atmosphere
+  // 2. Generate viewport-responsive particles for high-performance floating heart atmosphere
   useEffect(() => {
     const types: Particle["type"][] = [
       "heart-solid",
@@ -53,10 +53,13 @@ export default function SparklingHearts() {
       "lightGradGold",
     ];
 
-    const items: Particle[] = Array.from({ length: 60 }).map((_, i) => ({
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+    const count = isMobile ? 30 : 55;
+
+    const items: Particle[] = Array.from({ length: count }).map((_, i) => ({
       id: i,
-      x: (i * 1.65 + Math.random() * 2) % 98 + 1, // 1% to 99% evenly spread
-      size: Math.random() * 28 + 16, // 16px to 44px
+      x: (i * (100 / count) + Math.random() * 2) % 98 + 1, // 1% to 99% evenly spread
+      size: Math.random() * 26 + 14, // 14px to 40px
       duration: Math.random() * 10 + 7, // 7s to 17s float time
       delay: Math.random() * 8, // 0s to 8s stagger
       type: types[i % types.length],
