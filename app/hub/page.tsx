@@ -325,8 +325,7 @@ export default function PrivateHubPage() {
                 value={newLetterText}
                 onChange={(e) => setNewLetterText(e.target.value)}
                 placeholder={`Write something heartfelt for ${partnerName}...`}
-                className="w-full p-4 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white text-xs md:text-sm placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none leading-relaxed"
-                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                className="w-full p-4 rounded-2xl border border-rose-500/30 text-xs md:text-sm placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none leading-relaxed"
               />
 
               <div className="flex justify-end">
@@ -391,8 +390,7 @@ export default function PrivateHubPage() {
                   value={newMemTitle}
                   onChange={(e) => setNewMemTitle(e.target.value)}
                   placeholder="Memory Title (e.g. First Beach Trip 🏖️)"
-                  className="p-3.5 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white text-xs placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none"
-                  style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                  className="p-3.5 rounded-2xl border border-rose-500/30 text-xs placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none"
                 />
 
                 <input
@@ -400,8 +398,7 @@ export default function PrivateHubPage() {
                   required
                   value={newMemDate}
                   onChange={(e) => setNewMemDate(e.target.value)}
-                  className="p-3.5 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white text-xs focus:border-rose-400 focus:outline-none"
-                  style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                  className="p-3.5 rounded-2xl border border-rose-500/30 text-xs focus:border-rose-400 focus:outline-none"
                 />
               </div>
 
@@ -411,8 +408,7 @@ export default function PrivateHubPage() {
                 value={newMemNote}
                 onChange={(e) => setNewMemNote(e.target.value)}
                 placeholder="Write a short note about this memory..."
-                className="w-full p-4 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white text-xs placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none leading-relaxed"
-                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                className="w-full p-4 rounded-2xl border border-rose-500/30 text-xs placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none leading-relaxed"
               />
 
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">

@@ -514,8 +514,7 @@ export default function SettingsPage() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Enter your display name"
-                className="w-full px-4 py-3 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white text-sm placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none"
-                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                className="w-full px-4 py-3 rounded-2xl border border-rose-500/30 text-sm placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none"
               />
             </div>
 
@@ -794,8 +793,7 @@ export default function SettingsPage() {
                   value={oldPin}
                   onChange={(e) => setOldPin(e.target.value)}
                   placeholder="Enter Current 4–6 Digit PIN"
-                  className="w-full px-4 py-3 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white text-xs placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none"
-                  style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                  className="w-full px-4 py-3 rounded-2xl border border-rose-500/30 text-xs placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none"
                 />
               </div>
 
@@ -807,8 +805,7 @@ export default function SettingsPage() {
                   value={newPin}
                   onChange={(e) => setNewPin(e.target.value)}
                   placeholder="New PIN"
-                  className="w-full px-4 py-3 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white text-xs placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none"
-                  style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                  className="w-full px-4 py-3 rounded-2xl border border-rose-500/30 text-xs placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none"
                 />
                 <input
                   type="password"
@@ -817,8 +814,7 @@ export default function SettingsPage() {
                   value={confirmNewPin}
                   onChange={(e) => setConfirmNewPin(e.target.value)}
                   placeholder="Confirm New PIN"
-                  className="w-full px-4 py-3 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white text-xs placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none"
-                  style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                  className="w-full px-4 py-3 rounded-2xl border border-rose-500/30 text-xs placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none"
                 />
               </div>
 

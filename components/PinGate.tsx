@@ -128,7 +128,7 @@ export default function PinGate({ onUnlock }: PinGateProps) {
   }
 
   return (
-    <div className="max-w-md mx-auto my-12 p-8 rounded-3xl bg-gradient-to-br from-[#290B1B]/95 via-[#3D1127]/95 to-[#1E0613]/95 border border-rose-500/40 text-center space-y-6 shadow-2xl relative overflow-hidden">
+    <div className="max-w-md mx-auto my-12 p-8 moi-card text-center space-y-6 shadow-2xl relative overflow-hidden">
       <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-rose-600 to-wine-700 mx-auto flex items-center justify-center text-white shadow-glow">
         <Lock className="w-8 h-8" />
       </div>
@@ -162,8 +162,7 @@ export default function PinGate({ onUnlock }: PinGateProps) {
                 value={pinInput}
                 onChange={(e) => setPinInput(e.target.value)}
                 placeholder="Create 4–6 digit PIN"
-                className="w-full text-center tracking-widest text-lg py-3 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none"
-                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                className="w-full text-center tracking-widest text-lg py-3 rounded-2xl border border-rose-500/30 placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none"
               />
             </div>
 
@@ -175,8 +174,7 @@ export default function PinGate({ onUnlock }: PinGateProps) {
                 value={confirmPinInput}
                 onChange={(e) => setConfirmPinInput(e.target.value)}
                 placeholder="Confirm PIN"
-                className="w-full text-center tracking-widest text-lg py-3 rounded-2xl bg-[#1B0710] border border-rose-500/30 text-white placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none"
-                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                className="w-full text-center tracking-widest text-lg py-3 rounded-2xl border border-rose-500/30 placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none"
               />
             </div>
 
@@ -212,8 +210,7 @@ export default function PinGate({ onUnlock }: PinGateProps) {
                 value={pinInput}
                 onChange={(e) => setPinInput(e.target.value)}
                 placeholder="Enter 4–6 digit PIN"
-                className="w-full text-center tracking-widest text-xl font-bold py-3.5 rounded-2xl bg-[#1B0710] border border-rose-500/40 text-white placeholder:text-rose-300/40 focus:border-rose-400 focus:outline-none shadow-inner"
-                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+                className="w-full text-center tracking-widest text-xl font-bold py-3.5 rounded-2xl border border-rose-500/40 placeholder:text-rose-400/40 focus:border-rose-400 focus:outline-none shadow-inner"
               />
             </div>
 
