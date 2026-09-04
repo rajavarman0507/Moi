@@ -30,6 +30,11 @@ import {
   AlertCircle,
   Loader2,
   Volume2,
+  Headphones,
+  Settings2,
+  RefreshCw,
+  X,
+  Check,
 } from "lucide-react";
 
 // Google's Free Public STUN Servers Config
@@ -55,8 +60,6 @@ interface CallData {
   endedAt?: any;
 }
 
-
-
 // Helper: SDP Opus Audio Optimization (128 kbps bitrate + FEC for high-clarity sound)
 const optimizeAudioSdp = (sdp?: string): string | undefined => {
   if (!sdp) return sdp;
@@ -79,6 +82,7 @@ function CallContent() {
   const [isCameraOff, setIsCameraOff] = useState<boolean>(false);
   const [callSeconds, setCallSeconds] = useState<number>(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isSwappedView, setIsSwappedView] = useState<boolean>(false);
 
   // Streams State for React DOM binding
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -87,6 +91,15 @@ function CallContent() {
   // Permission Modal State
   const [showPermissionModal, setShowPermissionModal] = useState<boolean>(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+
+  // Device Management State
+  const [audioInputDevices, setAudioInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [videoInputDevices, setVideoInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedAudioInput, setSelectedAudioInput] = useState<string>("");
+  const [selectedAudioOutput, setSelectedAudioOutput] = useState<string>("");
+  const [selectedVideoInput, setSelectedVideoInput] = useState<string>("");
+  const [showDeviceSettings, setShowDeviceSettings] = useState<boolean>(false);
 
   // WebRTC & DOM Refs
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -111,7 +124,147 @@ function CallContent() {
   const autoAcceptParam = searchParams.get("accept") === "true";
   const typeParam = searchParams.get("type") as "audio" | "video" | null;
 
-  // 1. Subscribe to Firestore Call Signaling Document
+  // 1. Enumerate Media Devices (Microphones, Headphones, Bluetooth, Cameras)
+  const refreshMediaDevices = useCallback(async () => {
+    try {
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return;
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter((d) => d.kind === "audioinput");
+      const audioOutputs = devices.filter((d) => d.kind === "audiooutput");
+      const videoInputs = devices.filter((d) => d.kind === "videoinput");
+
+      setAudioInputDevices(audioInputs);
+      setAudioOutputDevices(audioOutputs);
+      setVideoInputDevices(videoInputs);
+
+      // Auto-detect Bluetooth headset / headphones if present and not manually selected
+      if (!selectedAudioOutput && audioOutputs.length > 0) {
+        const bluetoothOrHeadset = audioOutputs.find(
+          (d) =>
+            d.label.toLowerCase().includes("bluetooth") ||
+            d.label.toLowerCase().includes("headphone") ||
+            d.label.toLowerCase().includes("headset") ||
+            d.label.toLowerCase().includes("earphone")
+        );
+        if (bluetoothOrHeadset) {
+          setSelectedAudioOutput(bluetoothOrHeadset.deviceId);
+        } else {
+          setSelectedAudioOutput(audioOutputs[0].deviceId);
+        }
+      }
+
+      if (!selectedAudioInput && audioInputs.length > 0) {
+        setSelectedAudioInput(audioInputs[0].deviceId);
+      }
+      if (!selectedVideoInput && videoInputs.length > 0) {
+        setSelectedVideoInput(videoInputs[0].deviceId);
+      }
+    } catch (err) {
+      console.error("Error enumerating media devices:", err);
+    }
+  }, [selectedAudioInput, selectedAudioOutput, selectedVideoInput]);
+
+  useEffect(() => {
+    refreshMediaDevices();
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.addEventListener) {
+      navigator.mediaDevices.addEventListener("devicechange", refreshMediaDevices);
+      return () => {
+        navigator.mediaDevices.removeEventListener("devicechange", refreshMediaDevices);
+      };
+    }
+  }, [refreshMediaDevices]);
+
+  // 2. Change Audio Output Sink ID (Bluetooth / Speakers / Earphones Routing)
+  const applyAudioOutputDevice = useCallback(
+    async (deviceId: string) => {
+      setSelectedAudioOutput(deviceId);
+      try {
+        if (remoteVideoRef.current && "setSinkId" in remoteVideoRef.current) {
+          await (remoteVideoRef.current as any).setSinkId(deviceId);
+        }
+        if (remoteAudioRef.current && "setSinkId" in remoteAudioRef.current) {
+          await (remoteAudioRef.current as any).setSinkId(deviceId);
+        }
+      } catch (err) {
+        console.error("Error setting audio output sink ID:", err);
+      }
+    },
+    []
+  );
+
+  // 3. Change Audio Input Microphone Live Mid-Call
+  const changeAudioInputDevice = async (deviceId: string) => {
+    setSelectedAudioInput(deviceId);
+    if (!localStreamRef.current) return;
+
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: deviceId },
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      const newTrack = newStream.getAudioTracks()[0];
+      if (!newTrack) return;
+
+      if (peerConnectionRef.current) {
+        const sender = peerConnectionRef.current.getSenders().find((s) => s.track?.kind === "audio");
+        if (sender) {
+          await sender.replaceTrack(newTrack);
+        }
+      }
+
+      const oldTrack = localStreamRef.current.getAudioTracks()[0];
+      if (oldTrack) oldTrack.stop();
+
+      localStreamRef.current.removeTrack(oldTrack);
+      localStreamRef.current.addTrack(newTrack);
+      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+    } catch (err) {
+      console.error("Error switching microphone device:", err);
+    }
+  };
+
+  // 4. Change Video Input Camera Live Mid-Call
+  const changeVideoInputDevice = async (deviceId: string) => {
+    setSelectedVideoInput(deviceId);
+    if (!localStreamRef.current) return;
+
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+      });
+
+      const newTrack = newStream.getVideoTracks()[0];
+      if (!newTrack) return;
+
+      if (peerConnectionRef.current) {
+        const sender = peerConnectionRef.current.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) {
+          await sender.replaceTrack(newTrack);
+        }
+      }
+
+      const oldTrack = localStreamRef.current.getVideoTracks()[0];
+      if (oldTrack) oldTrack.stop();
+
+      localStreamRef.current.removeTrack(oldTrack);
+      localStreamRef.current.addTrack(newTrack);
+      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+    } catch (err) {
+      console.error("Error switching camera device:", err);
+    }
+  };
+
+  // 5. Subscribe to Firestore Call Signaling Document
   useEffect(() => {
     if (!coupleId || !myUid) return;
 
@@ -143,7 +296,7 @@ function CallContent() {
     return () => unsubscribe();
   }, [coupleId, myUid]);
 
-  // 2. Bind Local Stream to Local Video Ref whenever element mounts or stream updates
+  // 6. Bind Local Stream to Local Video Ref
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       if (localVideoRef.current.srcObject !== localStream) {
@@ -151,9 +304,9 @@ function CallContent() {
       }
       localVideoRef.current.play().catch((err) => console.log("Local video play notice:", err));
     }
-  }, [localStream, callData?.status, callData?.type, callType]);
+  }, [localStream, callData?.status, callData?.type, callType, isSwappedView]);
 
-  // 3. Bind Remote Stream to Remote Video and Remote Audio elements
+  // 7. Bind Remote Stream to Remote Video and Remote Audio Refs
   useEffect(() => {
     if (!remoteStream) return;
 
@@ -166,16 +319,19 @@ function CallContent() {
       remoteVideoRef.current.play().catch((err) => console.log("Remote video play notice:", err));
     }
 
-    // Always attach raw remoteStream to remoteAudioRef as well so audio output is guaranteed on all devices
     if (remoteAudioRef.current) {
       if (remoteAudioRef.current.srcObject !== remoteStream) {
         remoteAudioRef.current.srcObject = remoteStream;
       }
       remoteAudioRef.current.play().catch((err) => console.log("Remote audio play notice:", err));
     }
-  }, [remoteStream, callData?.status, callData?.type, callType]);
 
-  // 4. Format Active Call Duration Timer (MM:SS)
+    if (selectedAudioOutput) {
+      applyAudioOutputDevice(selectedAudioOutput);
+    }
+  }, [remoteStream, callData?.status, callData?.type, callType, isSwappedView, selectedAudioOutput, applyAudioOutputDevice]);
+
+  // 8. Format Active Call Duration Timer (MM:SS)
   useEffect(() => {
     if (callData?.status === "active") {
       if (!callTimerRef.current) {
@@ -196,7 +352,7 @@ function CallContent() {
     };
   }, [callData?.status]);
 
-  // 5. Clean up ICE Candidate collection documents
+  // 9. Clean up ICE Candidate collection documents
   const deleteIceCandidatesSubcollection = async () => {
     if (!coupleId) return;
     try {
@@ -209,7 +365,7 @@ function CallContent() {
     }
   };
 
-  // 6. Local WebRTC & Stream Cleanup
+  // 10. Local WebRTC & Stream Cleanup
   const cleanUpLocalMediaAndPeer = useCallback(() => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -237,7 +393,7 @@ function CallContent() {
     return () => cleanUpLocalMediaAndPeer();
   }, [cleanUpLocalMediaAndPeer]);
 
-  // 7. Initialize Local RTCPeerConnection with STUN Servers
+  // 11. Initialize Local RTCPeerConnection with STUN Servers
   const createPeerConnection = (targetCallType: "audio" | "video") => {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnectionRef.current = pc;
@@ -255,28 +411,35 @@ function CallContent() {
       }
     };
 
-    // Handle Remote Stream Tracks
+    // Handle Remote Stream Tracks — Clone new MediaStream object so React state reference updates!
     pc.ontrack = (event) => {
       console.log("Remote track received:", event.track.kind, event.streams);
-      let incomingStream = event.streams && event.streams[0];
-      if (!incomingStream) {
-        if (!remoteStreamRef.current) {
-          remoteStreamRef.current = new MediaStream();
-        }
-        remoteStreamRef.current.addTrack(event.track);
-        incomingStream = remoteStreamRef.current;
-      } else {
-        remoteStreamRef.current = incomingStream;
+
+      if (!remoteStreamRef.current) {
+        remoteStreamRef.current = new MediaStream();
       }
 
-      // Set raw WebRTC MediaStream directly for zero-latency audio playback
-      setRemoteStream(incomingStream);
+      if (!remoteStreamRef.current.getTracks().some((t) => t.id === event.track.id)) {
+        remoteStreamRef.current.addTrack(event.track);
+      }
+
+      if (event.streams && event.streams[0]) {
+        event.streams[0].getTracks().forEach((t) => {
+          if (!remoteStreamRef.current!.getTracks().some((tr) => tr.id === t.id)) {
+            remoteStreamRef.current!.addTrack(t);
+          }
+        });
+      }
+
+      // Create a NEW MediaStream instance with all tracks so React detects state reference change!
+      const updatedStream = new MediaStream(remoteStreamRef.current.getTracks());
+      setRemoteStream(updatedStream);
     };
 
     return pc;
   };
 
-  // 8. Listen to incoming ICE Candidates with Queuing / Buffering
+  // 12. Listen to incoming ICE Candidates with Queuing / Buffering
   const listenToRemoteIceCandidates = (pc: RTCPeerConnection) => {
     if (!coupleId || !myUid) return;
 
@@ -319,14 +482,39 @@ function CallContent() {
     }
   };
 
-  // 9. CALLER FLOW: Initiate Call
+  // Acquire Media Stream helper with 1080p HD Video resolution preference
+  const acquireLocalMediaStream = async (typeToUse: "audio" | "video"): Promise<MediaStream> => {
+    const audioConstraint = selectedAudioInput
+      ? { deviceId: { exact: selectedAudioInput }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      : { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: { ideal: 1 }, sampleRate: { ideal: 48000 } };
+
+    if (typeToUse === "audio") {
+      return await navigator.mediaDevices.getUserMedia({ audio: audioConstraint, video: false });
+    }
+
+    // High Definition 1080p Video Constraint with fallback to 720p
+    const videoConstraint1080p = selectedVideoInput
+      ? { deviceId: { exact: selectedVideoInput }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }
+      : { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 }, facingMode: "user" };
+
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: audioConstraint, video: videoConstraint1080p });
+    } catch (err1080) {
+      console.log("1080p resolution fallback to 720p standard HD...");
+      const videoConstraint720p = selectedVideoInput
+        ? { deviceId: { exact: selectedVideoInput }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" };
+      return await navigator.mediaDevices.getUserMedia({ audio: audioConstraint, video: videoConstraint720p });
+    }
+  };
+
+  // 13. CALLER FLOW: Initiate Call
   const initiateCall = async (typeToUse: "audio" | "video") => {
     if (!coupleId || !myUid || !partnerUid) return;
 
     try {
       setCallType(typeToUse);
 
-      // Glare Check: If partner already has a ringing call, switch to auto-accept!
       if (callData?.status === "ringing" && callData.callerId === partnerUid) {
         console.log("Glare detected: partner is already calling — switching to answer partner's call...");
         await executeAcceptCall(typeToUse);
@@ -335,36 +523,23 @@ function CallContent() {
 
       setPermissionError(null);
 
-      // High-quality Audio & HD Video Constraints
-      const constraints: MediaStreamConstraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true, // Auto gain control for loud clear speech
-          channelCount: { ideal: 1 },
-          sampleRate: { ideal: 48000 },
-        },
-        video: typeToUse === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await acquireLocalMediaStream(typeToUse);
       localStreamRef.current = stream;
       setLocalStream(stream);
 
-      // Create PeerConnection & Attach Local Tracks
+      // Enumerate devices once permission granted
+      refreshMediaDevices();
+
       const pc = createPeerConnection(typeToUse);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      // Listen for Remote ICE Candidates
       listenToRemoteIceCandidates(pc);
 
-      // Create SDP Offer with Opus Bitrate Boost (128 kbps)
       const rawOffer = await pc.createOffer();
       const boostedSdp = optimizeAudioSdp(rawOffer.sdp);
       const offer = new RTCSessionDescription({ type: rawOffer.type, sdp: boostedSdp });
       await pc.setLocalDescription(offer);
 
-      // Write Offer to Firestore couples/{coupleId}/call/current
       const callDocRef = doc(db, "couples", coupleId, "call", "current");
       await setDoc(callDocRef, {
         status: "ringing",
@@ -381,7 +556,6 @@ function CallContent() {
       setStatusMessage("Calling partner...");
       setShowPermissionModal(false);
 
-      // 45-Second Caller Missed Call Timeout
       if (ringingTimeoutRef.current) clearTimeout(ringingTimeoutRef.current);
       ringingTimeoutRef.current = setTimeout(async () => {
         if (peerConnectionRef.current) {
@@ -425,7 +599,7 @@ function CallContent() {
     }
   }, [callData]);
 
-  // 10. CALLEE FLOW: Execute Accept Call
+  // 14. CALLEE FLOW: Execute Accept Call
   const executeAcceptCall = async (typeToUse: "audio" | "video") => {
     if (!coupleId || !myUid || !callData?.offer) return;
 
@@ -433,30 +607,17 @@ function CallContent() {
       setCallType(typeToUse);
       setPermissionError(null);
 
-      // High-quality Audio & HD Video Constraints
-      const constraints: MediaStreamConstraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true, // Auto gain control for loud clear speech
-          channelCount: { ideal: 1 },
-          sampleRate: { ideal: 48000 },
-        },
-        video: typeToUse === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await acquireLocalMediaStream(typeToUse);
       localStreamRef.current = stream;
       setLocalStream(stream);
 
-      // Create PeerConnection & Attach Local Tracks
+      refreshMediaDevices();
+
       const pc = createPeerConnection(typeToUse);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      // Listen for Remote ICE Candidates
       listenToRemoteIceCandidates(pc);
 
-      // Set Remote Description from Caller SDP Offer
       const remoteOffer = new RTCSessionDescription({
         type: callData.offer.type,
         sdp: callData.offer.sdp,
@@ -464,16 +625,13 @@ function CallContent() {
 
       await pc.setRemoteDescription(remoteOffer);
 
-      // Flush Queued ICE Candidates immediately!
       await flushIceCandidateQueue(pc);
 
-      // Create SDP Answer with Opus Bitrate Boost (128 kbps)
       const rawAnswer = await pc.createAnswer();
       const boostedSdp = optimizeAudioSdp(rawAnswer.sdp);
       const answer = new RTCSessionDescription({ type: rawAnswer.type, sdp: boostedSdp });
       await pc.setLocalDescription(answer);
 
-      // Write Answer to Firestore and set status to active
       const callDocRef = doc(db, "couples", coupleId, "call", "current");
       await setDoc(
         callDocRef,
@@ -512,7 +670,7 @@ function CallContent() {
     }
   }, [autoAcceptParam, callData, typeParam]);
 
-  // 11. Hang Up Action & State Hygiene
+  // 15. Hang Up Action & State Hygiene
   const handleHangUp = async () => {
     if (!coupleId) return;
 
@@ -566,9 +724,19 @@ function CallContent() {
   const isInCall = callData?.status === "ringing" || callData?.status === "active";
   const activeCallType = callData?.type || callType;
 
+  // Selected output device label for badge display
+  const activeOutputDeviceLabel =
+    audioOutputDevices.find((d) => d.deviceId === selectedAudioOutput)?.label || "Audio Output";
+
+  const isBluetoothActive =
+    activeOutputDeviceLabel.toLowerCase().includes("bluetooth") ||
+    activeOutputDeviceLabel.toLowerCase().includes("headphone") ||
+    activeOutputDeviceLabel.toLowerCase().includes("headset") ||
+    activeOutputDeviceLabel.toLowerCase().includes("earphone");
+
   return (
     <div className="max-w-4xl mx-auto flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] relative overflow-hidden rounded-3xl border border-rose-500/40 bg-[#16060E]/95 shadow-2xl">
-      {/* Dedicated Audio element for audio-only call mode */}
+      {/* Dedicated Audio element for audio output routing */}
       <audio ref={remoteAudioRef} autoPlay playsInline />
 
       {/* Permission Pre-Prompt Modal */}
@@ -580,6 +748,107 @@ function CallContent() {
         onCancel={() => setShowPermissionModal(false)}
         permissionError={permissionError}
       />
+
+      {/* Audio / Video Device Settings Popover Modal */}
+      {showDeviceSettings && (
+        <div className="fixed inset-0 bg-[#12040A]/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#1E0613] border border-rose-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 text-white relative">
+            <div className="flex items-center justify-between border-b border-rose-500/20 pb-3">
+              <div className="flex items-center space-x-2">
+                <Headphones className="w-5 h-5 text-rose-400" />
+                <h3 className="text-base font-extrabold text-white">Audio & Video Devices</h3>
+              </div>
+              <button
+                onClick={() => setShowDeviceSettings(false)}
+                className="p-1.5 rounded-full hover:bg-rose-500/20 text-rose-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Audio Output (Speakers / Bluetooth Headphones) */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-rose-200 flex items-center gap-2">
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                  <span>Audio Output (Headphones / Speakers):</span>
+                </label>
+                <select
+                  value={selectedAudioOutput}
+                  onChange={(e) => applyAudioOutputDevice(e.target.value)}
+                  className="w-full bg-[#2B0A1A] border border-rose-500/30 rounded-xl px-3 py-2.5 text-white font-medium focus:outline-none focus:border-rose-400"
+                >
+                  {audioOutputDevices.length > 0 ? (
+                    audioOutputDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Speaker / Headset (${d.deviceId.slice(0, 5)})`}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Default System Output</option>
+                  )}
+                </select>
+              </div>
+
+              {/* Audio Input (Microphones / Bluetooth Mic) */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-rose-200 flex items-center gap-2">
+                  <Mic className="w-4 h-4 text-rose-400" />
+                  <span>Microphone (Audio Input):</span>
+                </label>
+                <select
+                  value={selectedAudioInput}
+                  onChange={(e) => changeAudioInputDevice(e.target.value)}
+                  className="w-full bg-[#2B0A1A] border border-rose-500/30 rounded-xl px-3 py-2.5 text-white font-medium focus:outline-none focus:border-rose-400"
+                >
+                  {audioInputDevices.length > 0 ? (
+                    audioInputDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Microphone (${d.deviceId.slice(0, 5)})`}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Default Microphone</option>
+                  )}
+                </select>
+              </div>
+
+              {/* Video Input (Cameras / Webcams) */}
+              {activeCallType === "video" && (
+                <div className="space-y-1.5">
+                  <label className="font-bold text-rose-200 flex items-center gap-2">
+                    <Video className="w-4 h-4 text-rose-400" />
+                    <span>Camera (HD Video Input):</span>
+                  </label>
+                  <select
+                    value={selectedVideoInput}
+                    onChange={(e) => changeVideoInputDevice(e.target.value)}
+                    className="w-full bg-[#2B0A1A] border border-rose-500/30 rounded-xl px-3 py-2.5 text-white font-medium focus:outline-none focus:border-rose-400"
+                  >
+                    {videoInputDevices.length > 0 ? (
+                      videoInputDevices.map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `Camera (${d.deviceId.slice(0, 5)})`}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">Default HD Camera</option>
+                    )}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowDeviceSettings(false)}
+              className="moi-button-primary w-full py-3 text-xs font-bold flex items-center justify-center space-x-2"
+            >
+              <Check className="w-4 h-4" />
+              <span>Apply & Done</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {!isInCall ? (
         /* IDLE / PRE-CALL LAUNCHER VIEW */
@@ -606,7 +875,7 @@ function CallContent() {
               <span>Call {partnerName}</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>HD WebRTC</span>
+                <span>1080p HD WebRTC</span>
               </span>
             </h2>
             <p className="text-xs text-rose-300/70">
@@ -631,7 +900,7 @@ function CallContent() {
               className="moi-button-primary flex-1 py-4 text-xs font-extrabold flex items-center justify-center space-x-2"
             >
               <Video className="w-5 h-5" />
-              <span>Start Video Call</span>
+              <span>Start HD Video Call</span>
             </button>
 
             <button
@@ -647,47 +916,70 @@ function CallContent() {
           </div>
         </div>
       ) : activeCallType === "video" ? (
-        /* ACTIVE VIDEO CALL UI */
+        /* ACTIVE DUAL HIGH-RESOLUTION VIDEO CALL UI */
         <div className="relative w-full h-full bg-[#0D0308] flex items-center justify-center overflow-hidden">
-          {/* Remote Video (Full Screen) */}
+          {/* Main Full-Screen Video (Remote Partner or Swapped Local) */}
           <video
-            ref={remoteVideoRef}
+            ref={isSwappedView ? localVideoRef : remoteVideoRef}
             autoPlay
             playsInline
+            muted={isSwappedView}
             className="w-full h-full object-cover"
           />
 
-          {/* Fallback overlay if remote stream is connecting */}
+          {/* Hidden reference video tag to maintain stream binding when swapped */}
+          <div className="hidden">
+            <video ref={isSwappedView ? remoteVideoRef : localVideoRef} autoPlay playsInline muted={!isSwappedView} />
+          </div>
+
+          {/* Connecting Spinner Overlay */}
           {!remoteStream && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#16060E]/90 z-10 space-y-3">
               <Loader2 className="w-10 h-10 text-rose-400 animate-spin" />
-              <span className="text-sm font-bold text-rose-200">Connecting video stream with {partnerName}...</span>
+              <span className="text-sm font-bold text-rose-200">Connecting HD video stream with {partnerName}...</span>
             </div>
           )}
 
-          {/* Local Video Preview (Small Corner Floating Window) */}
-          <div className="absolute top-4 right-4 w-32 h-44 sm:w-40 sm:h-56 rounded-2xl border-2 border-rose-500/50 bg-[#16060E] overflow-hidden shadow-2xl z-20">
+          {/* Floating PIP Corner Preview Video (Tap to Swap View) */}
+          <div
+            onClick={() => setIsSwappedView(!isSwappedView)}
+            className="absolute top-4 right-4 w-32 h-44 sm:w-44 sm:h-60 rounded-2xl border-2 border-rose-500/60 bg-[#16060E] overflow-hidden shadow-2xl z-20 cursor-pointer group hover:scale-105 transition-transform"
+            title="Click to swap fullscreen video view"
+          >
             <video
-              ref={localVideoRef}
+              ref={isSwappedView ? remoteVideoRef : localVideoRef}
               autoPlay
               playsInline
-              muted
-              className="w-full h-full object-cover"
+              muted={!isSwappedView}
+              className="w-full h-full object-cover pointer-events-none"
             />
+            <div className="absolute bottom-1 right-1 p-1 rounded-lg bg-black/60 backdrop-blur-md text-white text-[10px] font-bold opacity-80 group-hover:opacity-100 flex items-center gap-1">
+              <RefreshCw className="w-3 h-3 text-rose-300" />
+              <span>Swap</span>
+            </div>
           </div>
 
-          {/* Top Status & Timer Overlay */}
-          <div className="absolute top-4 left-4 z-20 flex items-center space-x-3 px-4 py-2 rounded-2xl bg-[#16060E]/80 backdrop-blur-md border border-rose-500/30">
-            <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-xs font-bold text-white">{partnerName}</span>
-            <span className="text-xs font-mono text-rose-300/80 flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-rose-400" />
-              <span>{formatTimer(callSeconds)}</span>
-            </span>
+          {/* Top Status, Timer & Device Badge Overlay */}
+          <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2">
+            <div className="flex items-center space-x-2.5 px-3.5 py-1.5 rounded-2xl bg-[#16060E]/85 backdrop-blur-md border border-rose-500/30">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+              <span className="text-xs font-bold text-white">{partnerName}</span>
+              <span className="text-xs font-mono text-rose-300/80 flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-rose-400" />
+                <span>{formatTimer(callSeconds)}</span>
+              </span>
+            </div>
+
+            {isBluetoothActive && (
+              <span className="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 flex items-center gap-1 backdrop-blur-md">
+                <Headphones className="w-3 h-3 text-emerald-400" />
+                <span>Bluetooth Headset</span>
+              </span>
+            )}
           </div>
 
           {/* Bottom Floating Control Bar */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 px-6 py-3 rounded-3xl bg-[#16060E]/90 backdrop-blur-xl border border-rose-500/40 flex items-center space-x-6 shadow-2xl">
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 px-5 py-3 rounded-3xl bg-[#16060E]/90 backdrop-blur-xl border border-rose-500/40 flex items-center space-x-4 sm:space-x-5 shadow-2xl">
             <button
               onClick={toggleMute}
               className={`p-3.5 rounded-2xl transition-all ${
@@ -710,6 +1002,17 @@ function CallContent() {
               title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
             >
               {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+            </button>
+
+            <button
+              onClick={() => setShowDeviceSettings(true)}
+              className="p-3.5 rounded-2xl bg-wine-900/60 text-rose-300 hover:text-white border border-rose-500/30 transition-all relative"
+              title="Audio Output & Microphone Devices (Bluetooth / Speakers)"
+            >
+              <Headphones className="w-5 h-5" />
+              {isBluetoothActive && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-black" />
+              )}
             </button>
 
             <button
@@ -743,11 +1046,17 @@ function CallContent() {
                 <Clock className="w-4 h-4 text-rose-400" />
                 <span>In HD Call • {formatTimer(callSeconds)}</span>
               </p>
+              {isBluetoothActive && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30 mt-2">
+                  <Headphones className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Bluetooth Audio Active</span>
+                </span>
+              )}
             </div>
           </div>
 
           {/* Bottom Audio Control Bar */}
-          <div className="pb-8 flex items-center space-x-6">
+          <div className="pb-8 flex items-center space-x-5 sm:space-x-6">
             <button
               onClick={toggleMute}
               className={`p-4 rounded-2xl transition-all ${
@@ -758,6 +1067,17 @@ function CallContent() {
               title={isMuted ? "Unmute Audio" : "Mute Audio"}
             >
               {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+            </button>
+
+            <button
+              onClick={() => setShowDeviceSettings(true)}
+              className="p-4 rounded-2xl bg-wine-900/60 text-rose-300 hover:text-white border border-rose-500/30 transition-all relative"
+              title="Audio Output & Microphone Devices (Bluetooth / Speakers)"
+            >
+              <Headphones className="w-6 h-6" />
+              {isBluetoothActive && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-black" />
+              )}
             </button>
 
             <button
