@@ -29,12 +29,10 @@ import {
   Clock,
   AlertCircle,
   Loader2,
+  Volume2,
 } from "lucide-react";
 
 // Google's Free Public STUN Servers Config
-// STUN-only P2P connections succeed across most residential broadband and Wi-Fi networks,
-// but direct P2P connections can fail on strict/symmetric NATs (corporate networks, carrier NATs).
-// TURN fallback is planned for Phase 11b.
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -57,6 +55,47 @@ interface CallData {
   endedAt?: any;
 }
 
+// Helper: Web Audio API volume booster (180% gain amplifier for loud speech)
+const boostAudioStreamVolume = (stream: MediaStream): MediaStream => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return stream;
+
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) return stream;
+
+    const ctx = new AudioCtx();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
+    const source = ctx.createMediaStreamSource(new MediaStream(audioTracks));
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = 1.8; // 180% volume boost for clear loud audio
+
+    const dest = ctx.createMediaStreamDestination();
+    source.connect(gainNode);
+
+    const boostedStream = new MediaStream();
+    dest.stream.getAudioTracks().forEach((t) => boostedStream.addTrack(t));
+    stream.getVideoTracks().forEach((t) => boostedStream.addTrack(t));
+
+    return boostedStream;
+  } catch (err) {
+    console.error("Audio volume boost fallback:", err);
+    return stream;
+  }
+};
+
+// Helper: SDP Opus Audio Optimization (128 kbps bitrate + FEC for high-clarity sound)
+const optimizeAudioSdp = (sdp?: string): string | undefined => {
+  if (!sdp) return sdp;
+  return sdp.replace(/a=fmtp:111 (.*)/g, (match, p1) => {
+    if (p1.includes("maxaveragebitrate")) return match;
+    return `a=fmtp:111 ${p1};maxaveragebitrate=128000;stereo=0;useinbandfec=1;usedtx=0`;
+  });
+};
+
 function CallContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -70,6 +109,10 @@ function CallContent() {
   const [isCameraOff, setIsCameraOff] = useState<boolean>(false);
   const [callSeconds, setCallSeconds] = useState<number>(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Streams State for React DOM binding
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
 
   // Permission Modal State
   const [showPermissionModal, setShowPermissionModal] = useState<boolean>(false);
@@ -108,6 +151,9 @@ function CallContent() {
       if (snap.exists()) {
         const data = snap.data() as CallData;
         setCallData(data);
+        if (data.type) {
+          setCallType(data.type);
+        }
 
         if (data.status === "rejected") {
           setStatusMessage("Call declined by partner");
@@ -127,7 +173,43 @@ function CallContent() {
     return () => unsubscribe();
   }, [coupleId, myUid]);
 
-  // 2. Format Active Call Duration Timer (MM:SS)
+  // 2. Bind Local Stream to Local Video Ref whenever element mounts or stream updates
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      localVideoRef.current.play().catch((err) => console.log("Local video play notice:", err));
+    }
+  }, [localStream, callData?.status, callData?.type, callType]);
+
+  // 3. Bind Remote Stream to Remote Video or Remote Audio Ref whenever element mounts
+  useEffect(() => {
+    if (!remoteStream) return;
+
+    const activeType = callData?.type || callType;
+
+    if (activeType === "video" && remoteVideoRef.current) {
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.volume = 1.0;
+      }
+      remoteVideoRef.current.play().catch((err) => console.log("Remote video play notice:", err));
+
+      // Clear audio ref in video mode so video element handles audio output without duplication
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = null;
+      }
+    } else if (remoteAudioRef.current) {
+      if (remoteAudioRef.current.srcObject !== remoteStream) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        remoteAudioRef.current.volume = 1.0;
+      }
+      remoteAudioRef.current.play().catch((err) => console.log("Remote audio play notice:", err));
+    }
+  }, [remoteStream, callData?.status, callData?.type, callType]);
+
+  // 4. Format Active Call Duration Timer (MM:SS)
   useEffect(() => {
     if (callData?.status === "active") {
       if (!callTimerRef.current) {
@@ -148,7 +230,7 @@ function CallContent() {
     };
   }, [callData?.status]);
 
-  // 3. Clean up ICE Candidate collection documents
+  // 5. Clean up ICE Candidate collection documents
   const deleteIceCandidatesSubcollection = async () => {
     if (!coupleId) return;
     try {
@@ -161,12 +243,13 @@ function CallContent() {
     }
   };
 
-  // 4. Local WebRTC & Stream Cleanup
+  // 6. Local WebRTC & Stream Cleanup
   const cleanUpLocalMediaAndPeer = useCallback(() => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
+    setLocalStream(null);
 
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -178,6 +261,8 @@ function CallContent() {
       ringingTimeoutRef.current = null;
     }
 
+    remoteStreamRef.current = null;
+    setRemoteStream(null);
     iceCandidateQueueRef.current = [];
   }, []);
 
@@ -186,7 +271,7 @@ function CallContent() {
     return () => cleanUpLocalMediaAndPeer();
   }, [cleanUpLocalMediaAndPeer]);
 
-  // 5. Initialize Local RTCPeerConnection with STUN Servers
+  // 7. Initialize Local RTCPeerConnection with STUN Servers
   const createPeerConnection = (targetCallType: "audio" | "video") => {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnectionRef.current = pc;
@@ -206,22 +291,27 @@ function CallContent() {
 
     // Handle Remote Stream Tracks
     pc.ontrack = (event) => {
-      console.log("Remote track received:", event.streams);
-      if (event.streams && event.streams[0]) {
-        remoteStreamRef.current = event.streams[0];
-
-        if (targetCallType === "video" && remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        } else if (remoteAudioRef.current) {
-          remoteAudioRef.current.srcObject = event.streams[0];
+      console.log("Remote track received:", event.track.kind, event.streams);
+      let incomingStream = event.streams && event.streams[0];
+      if (!incomingStream) {
+        if (!remoteStreamRef.current) {
+          remoteStreamRef.current = new MediaStream();
         }
+        remoteStreamRef.current.addTrack(event.track);
+        incomingStream = remoteStreamRef.current;
+      } else {
+        remoteStreamRef.current = incomingStream;
       }
+
+      // Boost audio volume with GainNode for crystal clarity & loudness
+      const boostedStream = boostAudioStreamVolume(incomingStream);
+      setRemoteStream(boostedStream);
     };
 
     return pc;
   };
 
-  // 6. Listen to incoming ICE Candidates with Queuing / Buffering
+  // 8. Listen to incoming ICE Candidates with Queuing / Buffering
   const listenToRemoteIceCandidates = (pc: RTCPeerConnection) => {
     if (!coupleId || !myUid) return;
 
@@ -237,7 +327,6 @@ function CallContent() {
               sdpMLineIndex: data.sdpMLineIndex,
             };
 
-            // ICE Candidate Buffering: Queue if remote description is not set yet!
             if (!pc.remoteDescription) {
               iceCandidateQueueRef.current.push(candidateInit);
             } else {
@@ -265,11 +354,13 @@ function CallContent() {
     }
   };
 
-  // 7. CALLER FLOW: Initiate Call
+  // 9. CALLER FLOW: Initiate Call
   const initiateCall = async (typeToUse: "audio" | "video") => {
     if (!coupleId || !myUid || !partnerUid) return;
 
     try {
+      setCallType(typeToUse);
+
       // Glare Check: If partner already has a ringing call, switch to auto-accept!
       if (callData?.status === "ringing" && callData.callerId === partnerUid) {
         console.log("Glare detected: partner is already calling — switching to answer partner's call...");
@@ -279,28 +370,33 @@ function CallContent() {
 
       setPermissionError(null);
 
-      // Acquire Media Stream
-      const constraints = {
-        audio: true,
-        video: typeToUse === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+      // High-quality Audio & HD Video Constraints
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true, // Auto gain control for loud clear speech
+          channelCount: { ideal: 1 },
+          sampleRate: { ideal: 48000 },
+        },
+        video: typeToUse === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
       };
 
-      const localStream = await navigator.mediaDevices.getUserMedia(constraints);
-      localStreamRef.current = localStream;
-
-      if (typeToUse === "video" && localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
-      }
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      localStreamRef.current = stream;
+      setLocalStream(stream);
 
       // Create PeerConnection & Attach Local Tracks
       const pc = createPeerConnection(typeToUse);
-      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       // Listen for Remote ICE Candidates
       listenToRemoteIceCandidates(pc);
 
-      // Create SDP Offer
-      const offer = await pc.createOffer();
+      // Create SDP Offer with Opus Bitrate Boost (128 kbps)
+      const rawOffer = await pc.createOffer();
+      const boostedSdp = optimizeAudioSdp(rawOffer.sdp);
+      const offer = new RTCSessionDescription({ type: rawOffer.type, sdp: boostedSdp });
       await pc.setLocalDescription(offer);
 
       // Write Offer to Firestore couples/{coupleId}/call/current
@@ -364,29 +460,33 @@ function CallContent() {
     }
   }, [callData]);
 
-  // 8. CALLEE FLOW: Execute Accept Call
+  // 10. CALLEE FLOW: Execute Accept Call
   const executeAcceptCall = async (typeToUse: "audio" | "video") => {
     if (!coupleId || !myUid || !callData?.offer) return;
 
     try {
+      setCallType(typeToUse);
       setPermissionError(null);
 
-      // Acquire Media Stream
-      const constraints = {
-        audio: true,
-        video: typeToUse === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+      // High-quality Audio & HD Video Constraints
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true, // Auto gain control for loud clear speech
+          channelCount: { ideal: 1 },
+          sampleRate: { ideal: 48000 },
+        },
+        video: typeToUse === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
       };
 
-      const localStream = await navigator.mediaDevices.getUserMedia(constraints);
-      localStreamRef.current = localStream;
-
-      if (typeToUse === "video" && localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
-      }
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      localStreamRef.current = stream;
+      setLocalStream(stream);
 
       // Create PeerConnection & Attach Local Tracks
       const pc = createPeerConnection(typeToUse);
-      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       // Listen for Remote ICE Candidates
       listenToRemoteIceCandidates(pc);
@@ -402,8 +502,10 @@ function CallContent() {
       // Flush Queued ICE Candidates immediately!
       await flushIceCandidateQueue(pc);
 
-      // Create SDP Answer
-      const answer = await pc.createAnswer();
+      // Create SDP Answer with Opus Bitrate Boost (128 kbps)
+      const rawAnswer = await pc.createAnswer();
+      const boostedSdp = optimizeAudioSdp(rawAnswer.sdp);
+      const answer = new RTCSessionDescription({ type: rawAnswer.type, sdp: boostedSdp });
       await pc.setLocalDescription(answer);
 
       // Write Answer to Firestore and set status to active
@@ -427,7 +529,6 @@ function CallContent() {
       console.error("Error accepting call / getUserMedia failed:", err);
       setPermissionError("Camera/mic access is needed for calls — please enable it in browser settings.");
 
-      // Permission-Denied After Accept Handler: Transition status to ended gracefully
       if (coupleId) {
         const callDocRef = doc(db, "couples", coupleId, "call", "current");
         setDoc(callDocRef, { status: "ended", endedAt: serverTimestamp() }, { merge: true }).catch(
@@ -446,7 +547,7 @@ function CallContent() {
     }
   }, [autoAcceptParam, callData, typeParam]);
 
-  // 9. Hang Up Action & State Hygiene
+  // 11. Hang Up Action & State Hygiene
   const handleHangUp = async () => {
     if (!coupleId) return;
 
@@ -456,10 +557,8 @@ function CallContent() {
       const callDocRef = doc(db, "couples", coupleId, "call", "current");
       await setDoc(callDocRef, { status: "ended", endedAt: serverTimestamp() }, { merge: true });
 
-      // Delete subcollection ICE candidates
       deleteIceCandidatesSubcollection();
 
-      // Reset call/current to idle after 1.5s transition delay
       setTimeout(async () => {
         try {
           await setDoc(callDocRef, { status: "idle" });
@@ -500,11 +599,12 @@ function CallContent() {
   };
 
   const isInCall = callData?.status === "ringing" || callData?.status === "active";
+  const activeCallType = callData?.type || callType;
 
   return (
     <div className="max-w-4xl mx-auto flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] relative overflow-hidden rounded-3xl border border-rose-500/40 bg-[#16060E]/95 shadow-2xl">
-      {/* Hidden Audio element for remote audio output */}
-      <audio ref={remoteAudioRef} autoPlay />
+      {/* Dedicated Audio element for audio-only call mode */}
+      <audio ref={remoteAudioRef} autoPlay playsInline />
 
       {/* Permission Pre-Prompt Modal */}
       <MediaPermissionModal
@@ -541,7 +641,7 @@ function CallContent() {
               <span>Call {partnerName}</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>WebRTC P2P</span>
+                <span>HD WebRTC</span>
               </span>
             </h2>
             <p className="text-xs text-rose-300/70">
@@ -581,7 +681,7 @@ function CallContent() {
             </button>
           </div>
         </div>
-      ) : callData?.type === "video" ? (
+      ) : activeCallType === "video" ? (
         /* ACTIVE VIDEO CALL UI */
         <div className="relative w-full h-full bg-[#0D0308] flex items-center justify-center overflow-hidden">
           {/* Remote Video (Full Screen) */}
@@ -591,6 +691,14 @@ function CallContent() {
             playsInline
             className="w-full h-full object-cover"
           />
+
+          {/* Fallback overlay if remote stream is connecting */}
+          {!remoteStream && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#16060E]/90 z-10 space-y-3">
+              <Loader2 className="w-10 h-10 text-rose-400 animate-spin" />
+              <span className="text-sm font-bold text-rose-200">Connecting video stream with {partnerName}...</span>
+            </div>
+          )}
 
           {/* Local Video Preview (Small Corner Floating Window) */}
           <div className="absolute top-4 right-4 w-32 h-44 sm:w-40 sm:h-56 rounded-2xl border-2 border-rose-500/50 bg-[#16060E] overflow-hidden shadow-2xl z-20">
@@ -668,7 +776,7 @@ function CallContent() {
               <h2 className="text-2xl font-extrabold text-white">{partnerName}</h2>
               <p className="text-sm font-mono text-rose-300/80 flex items-center justify-center gap-1.5 pt-1">
                 <Clock className="w-4 h-4 text-rose-400" />
-                <span>In Call • {formatTimer(callSeconds)}</span>
+                <span>In HD Call • {formatTimer(callSeconds)}</span>
               </p>
             </div>
           </div>
