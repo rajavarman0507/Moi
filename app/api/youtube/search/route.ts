@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       tracks: filtered.length > 0 ? filtered : FALLBACK_TRACKS,
       source: "fallback",
-      warning: "No YouTube API Key set in environment; showing featured suggestions.",
+      warning: "Featured Song Mode Active: Add YOUTUBE_API_KEY to your Vercel environment variables to enable custom live YouTube search.",
     });
   }
 
