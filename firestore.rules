@@ -89,7 +89,7 @@ service cloud.firestore {
       }
 
       // Explicit rules for Encrypted Chat Messages subcollection
-      match /chat/messages/{messageId} {
+      match /chatMessages/{messageId} {
         allow read, delete: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
         allow create: if isAuthenticated() 
                       && isPartnerInCouple(getCoupleData(coupleId)) 
@@ -100,7 +100,7 @@ service cloud.firestore {
       }
 
       // Explicit rules for Chat Typing indicator subcollection
-      match /chat/typing/{userId} {
+      match /chatTyping/{userId} {
         allow read: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
         allow write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId)) && request.auth.uid == userId;
       }

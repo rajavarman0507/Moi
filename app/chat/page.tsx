@@ -77,7 +77,7 @@ export default function ChatPage() {
       try {
         const batch = writeBatch(db);
         unreadPartnerMsgs.forEach((m) => {
-          const msgRef = doc(db, "couples", coupleId, "chat", "messages", m.id);
+          const msgRef = doc(db, "couples", coupleId, "chatMessages", m.id);
           batch.update(msgRef, {
             read: true,
             updatedAt: serverTimestamp(),
@@ -95,7 +95,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!isUnlocked || !cryptoKey || !coupleId) return;
 
-    const msgsCollRef = collection(db, "couples", coupleId, "chat", "messages");
+    const msgsCollRef = collection(db, "couples", coupleId, "chatMessages");
     const q = query(msgsCollRef, orderBy("createdAt", "asc"), limitToLast(100));
 
     const unsubscribe = onSnapshot(
@@ -147,7 +147,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!isUnlocked || !coupleId || !partnerUid) return;
 
-    const partnerTypingRef = doc(db, "couples", coupleId, "chat", "typing", partnerUid);
+    const partnerTypingRef = doc(db, "couples", coupleId, "chatTyping", partnerUid);
 
     const unsubscribe = onSnapshot(partnerTypingRef, (snap) => {
       if (snap.exists()) {
@@ -169,7 +169,7 @@ export default function ChatPage() {
   const setUserTypingStatus = async (isTyping: boolean) => {
     if (!coupleId || !user?.uid) return;
     try {
-      const typingRef = doc(db, "couples", coupleId, "chat", "typing", user.uid);
+      const typingRef = doc(db, "couples", coupleId, "chatTyping", user.uid);
       await setDoc(
         typingRef,
         {
@@ -216,7 +216,7 @@ export default function ChatPage() {
   const checkAndPruneMessages = async () => {
     if (!coupleId) return;
     try {
-      const collRef = collection(db, "couples", coupleId, "chat", "messages");
+      const collRef = collection(db, "couples", coupleId, "chatMessages");
       const countSnap = await getCountFromServer(collRef);
       const totalCount = countSnap.data().count;
 
@@ -257,7 +257,7 @@ export default function ChatPage() {
       const { cipherText, ivHex } = await encryptWithKey(textToSend, cryptoKey);
 
       // Add to Firestore messages
-      const msgsCollRef = collection(db, "couples", coupleId, "chat", "messages");
+      const msgsCollRef = collection(db, "couples", coupleId, "chatMessages");
       await addDoc(msgsCollRef, {
         cipherText,
         ivHex,
