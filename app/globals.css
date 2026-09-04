@@ -302,3 +302,50 @@ html.light ::-webkit-scrollbar-track {
 html.light ::-webkit-scrollbar-thumb {
   background: rgba(225, 29, 72, 0.4) !important;
 }
+
+/* Custom Floating Heart Animations for Light & Dark Themes */
+@keyframes float-heart-light {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg) scale(0.9);
+    opacity: 0;
+  }
+  15% {
+    opacity: var(--particle-opacity, 0.85);
+  }
+  50% {
+    transform: translateY(-50vh) translateX(22px) rotate(14deg) scale(1.08);
+  }
+  85% {
+    opacity: var(--particle-opacity, 0.85);
+  }
+  100% {
+    transform: translateY(-110vh) translateX(-18px) rotate(-10deg) scale(0.95);
+    opacity: 0;
+  }
+}
+
+@keyframes float-heart-dark {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: var(--particle-opacity, 0.7);
+  }
+  80% {
+    opacity: var(--particle-opacity, 0.7);
+  }
+  100% {
+    transform: translateY(-110vh) translateX(12px) rotate(8deg);
+    opacity: 0;
+  }
+}
+
+.animate-float-heart-light {
+  animation: float-heart-light linear infinite;
+}
+
+.animate-float-heart-dark {
+  animation: float-heart-dark linear infinite;
+}
+
