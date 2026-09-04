@@ -105,6 +105,49 @@ export default function SettingsPage() {
     }
   }, [couple]);
 
+  // Helper to compress avatar image file to lightweight Base64 Data URL for instant resilient fallback
+  const compressAvatarFile = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxDim = 320;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", 0.85));
+          } else {
+            resolve(e.target?.result as string);
+          }
+        };
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Handle Profile Save
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,11 +159,30 @@ export default function SettingsPage() {
       let photoUrl = userProfile?.photoUrl || "";
 
       if (profilePhoto) {
-        const storageRef = ref(storage, `users/${user.uid}/profilePhoto`);
-        await uploadBytes(storageRef, profilePhoto);
-        photoUrl = await getDownloadURL(storageRef);
+        // Compress avatar file first to guarantee ultra-fast Data URL fallback
+        const dataUrl = await compressAvatarFile(profilePhoto);
+        photoUrl = dataUrl;
+
+        // Try uploading to Cloud Storage with a 3.5-second timeout safeguard
+        try {
+          const storageRef = ref(storage, `users/${user.uid}/profilePhoto`);
+          const uploadPromise = uploadBytes(storageRef, profilePhoto).then(() =>
+            getDownloadURL(storageRef)
+          );
+          const timeoutPromise = new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error("Storage upload timeout")), 3500)
+          );
+
+          const cloudStorageUrl = await Promise.race([uploadPromise, timeoutPromise]);
+          if (cloudStorageUrl) {
+            photoUrl = cloudStorageUrl;
+          }
+        } catch (storageErr) {
+          console.warn("Cloud Storage upload fallback to compressed Data URL:", storageErr);
+        }
       }
 
+      // Save user profile document to Firestore
       const userRef = doc(db, "users", user.uid);
       await setDoc(userRef, { displayName: displayName.trim(), photoUrl }, { merge: true });
 
