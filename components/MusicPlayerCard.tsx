@@ -19,6 +19,7 @@ import {
   Sparkles,
   AlertCircle,
   Clock,
+  WifiOff,
 } from "lucide-react";
 
 export default function MusicPlayerCard() {
@@ -32,6 +33,7 @@ export default function MusicPlayerCard() {
     searchWarning,
     currentTime,
     duration,
+    isReconnecting,
     playTrack,
     togglePlayPause,
     seekTo,
@@ -98,6 +100,14 @@ export default function MusicPlayerCard() {
           </p>
         </div>
       </div>
+
+      {/* BUG 4 FIX: Informational Reconnecting Banner (never blocks playback) */}
+      {isReconnecting && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/30 text-amber-200 text-xs flex items-center space-x-2 animate-pulse">
+          <WifiOff className="w-4 h-4 text-amber-300 shrink-0" />
+          <span>Reconnecting to stream server... Local playback is unaffected.</span>
+        </div>
+      )}
 
       {/* Autoplay Gesture Join Banner */}
       {pendingAutoplayJoin && (

@@ -48,6 +48,7 @@ interface MusicContextType {
   searchWarning: string | null;
   currentTime: number;
   duration: number;
+  isReconnecting: boolean;
   playTrack: (track: Track) => Promise<void>;
   togglePlayPause: () => Promise<void>;
   seekTo: (seconds: number) => Promise<void>;
@@ -71,6 +72,7 @@ const MusicContext = createContext<MusicContextType>({
   searchWarning: null,
   currentTime: 0,
   duration: 0,
+  isReconnecting: false,
   playTrack: async () => {},
   togglePlayPause: async () => {},
   seekTo: async () => {},
@@ -106,6 +108,10 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
 
+  // Network & Cache state (BUG 4)
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [isOfflineCache, setIsOfflineCache] = useState<boolean>(false);
+
   const playerRef = useRef<any>(null);
   const currentTrackRef = useRef<CurrentTrack | null>(null);
   currentTrackRef.current = currentTrack;
@@ -113,13 +119,27 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const queueRef = useRef<QueueItem[]>([]);
   queueRef.current = queue;
 
-  const isUserActionRef = useRef<boolean>(false);
+  // BUG 1 FIX: Track currently-loaded videoId in a local ref (not component state)
+  const loadedVideoIdRef = useRef<string | null>(null);
+  const isFromCacheRef = useRef<boolean>(false);
 
-  // 1. Initial Local Volume setup
+  // 1. Initial Local Volume & Network listeners setup
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedVol = localStorage.getItem("moi_music_volume");
       if (savedVol) setLocalVolumeState(parseInt(savedVol, 10));
+
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+
+      setIsOnline(navigator.onLine);
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
     }
   }, []);
 
@@ -172,8 +192,9 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
             }
           },
           onStateChange: (evt: any) => {
-            // Track Ended (0) -> Execute Atomic Firestore Transaction to advance queue
+            // BUG 2 & 3 FIX: YT.PlayerState.ENDED (0) reads LIVE refs
             if (evt.data === 0) {
+              console.log("[MusicSync] YT.PlayerState.ENDED fired -> advancing queue");
               handleTrackEnd();
             } else if (evt.data === 1) {
               setPendingAutoplayJoin(false);
@@ -202,26 +223,48 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isPlayerReady, currentTrack?.videoId, currentTrack?.isPlaying]);
 
-  // 3. Subscribe to couples/{coupleId}/music/current
+  // BUG 4 FIX: Subscribe to couples/{coupleId}/music/current with { includeMetadataChanges: true }
   useEffect(() => {
     if (!coupleId) return;
 
     const currentDocRef = doc(db, "couples", coupleId, "music", "current");
-    const unsubscribe = onSnapshot(currentDocRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() as CurrentTrack;
-        const prevData = currentTrackRef.current;
-        setCurrentTrack(data);
+    const unsubscribe = onSnapshot(
+      currentDocRef,
+      { includeMetadataChanges: true },
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as CurrentTrack;
+          const isFromCache = snap.metadata.fromCache;
+          const wasFromCache = isFromCacheRef.current;
+          isFromCacheRef.current = isFromCache;
 
-        // Synchronize local YouTube Player with incoming Firestore state
-        syncLocalPlayerWithState(data, prevData);
-      } else {
-        setCurrentTrack(null);
-        if (playerRef.current && playerRef.current.pauseVideo) {
-          playerRef.current.pauseVideo();
+          setCurrentTrack(data);
+          setIsOfflineCache(isFromCache);
+
+          // BUG 4 FIX: While fromCache is true (offline/reconnecting), do NOT run drift seeks
+          if (isFromCache) {
+            console.log("[MusicSync] Snapshot from cache (offline mode) -> skipping drift seeks");
+            return;
+          }
+
+          // BUG 4 FIX: Perform ONE clean resync upon reconnection (fromCache changed true -> false)
+          if (wasFromCache && !isFromCache) {
+            console.log("[MusicSync] Reconnected to server -> executing single clean resync");
+            resyncOnReconnect(data);
+            return;
+          }
+
+          // Synchronize local YouTube Player with incoming Firestore state
+          syncLocalPlayerWithState(data, currentTrackRef.current);
+        } else {
+          setCurrentTrack(null);
+          loadedVideoIdRef.current = null;
+          if (playerRef.current && playerRef.current.pauseVideo) {
+            playerRef.current.pauseVideo();
+          }
         }
       }
-    });
+    );
 
     return () => unsubscribe();
   }, [coupleId]);
@@ -244,25 +287,71 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, [coupleId]);
 
+  // Defensive position clamping helper (BUG 2 & 3 Clamp Requirement)
+  const clampedSeekTo = (posSeconds: number) => {
+    if (!playerRef.current || typeof playerRef.current.seekTo !== "function") return;
+    const dur = playerRef.current.getDuration ? playerRef.current.getDuration() : 0;
+    const maxAllowed = dur > 0 ? Math.max(0, dur - 0.5) : posSeconds;
+    const target = Math.min(posSeconds, maxAllowed);
+    playerRef.current.seekTo(target, true);
+  };
+
+  // BUG 4 FIX: Resync cleanly once upon reconnection
+  const resyncOnReconnect = (data: CurrentTrack) => {
+    if (!playerRef.current || !playerRef.current.loadVideoById) return;
+
+    const updatedAtMs = data.updatedAt?.toDate
+      ? data.updatedAt.toDate().getTime()
+      : Date.now();
+    const elapsedSec = data.isPlaying && data.updatedAt?.toDate
+      ? Math.max(0, (Date.now() - updatedAtMs) / 1000)
+      : 0;
+    const rawExpectedPos = Math.max(0, data.positionAtUpdate + elapsedSec);
+    const dur = playerRef.current.getDuration ? playerRef.current.getDuration() : 0;
+    const expectedPos = dur > 0 ? Math.min(rawExpectedPos, Math.max(0, dur - 0.5)) : rawExpectedPos;
+
+    if (!loadedVideoIdRef.current || loadedVideoIdRef.current !== data.videoId) {
+      playerRef.current.loadVideoById({
+        videoId: data.videoId,
+        startSeconds: expectedPos,
+      });
+      loadedVideoIdRef.current = data.videoId;
+    } else {
+      clampedSeekTo(expectedPos);
+    }
+
+    if (data.isPlaying) {
+      if (playerRef.current.unMute) playerRef.current.unMute();
+      if (playerRef.current.setVolume) playerRef.current.setVolume(localVolume);
+      playerRef.current.playVideo();
+    } else {
+      if (playerRef.current.pauseVideo) playerRef.current.pauseVideo();
+    }
+  };
+
   // Synchronize local YouTube Player with incoming Firestore state
+  // BUG 1 FIX: Explicit branching — NEVER reload video if videoId is unchanged!
   const syncLocalPlayerWithState = (data: CurrentTrack, prevData: CurrentTrack | null) => {
     if (!playerRef.current || !playerRef.current.loadVideoById) return;
 
     const updatedAtMs = data.updatedAt?.toDate
       ? data.updatedAt.toDate().getTime()
       : Date.now();
-    // Only calculate elapsedSec if track is actively playing! If paused, elapsedSec is 0.
     const elapsedSec = data.isPlaying && data.updatedAt?.toDate
       ? Math.max(0, (Date.now() - updatedAtMs) / 1000)
       : 0;
-    const expectedPos = Math.max(0, data.positionAtUpdate + elapsedSec);
+    const rawExpectedPos = Math.max(0, data.positionAtUpdate + elapsedSec);
+    const dur = playerRef.current.getDuration ? playerRef.current.getDuration() : 0;
+    const expectedPos = dur > 0 ? Math.min(rawExpectedPos, Math.max(0, dur - 0.5)) : rawExpectedPos;
 
-    // If video changed
-    if (!prevData || prevData.videoId !== data.videoId) {
+    // Genuine track change (videoId changed or brand new load)
+    if (!loadedVideoIdRef.current || loadedVideoIdRef.current !== data.videoId) {
+      console.log(`[MusicSync] Genuine track change -> loadVideoById(${data.videoId}, ${expectedPos.toFixed(1)}s)`);
       playerRef.current.loadVideoById({
         videoId: data.videoId,
         startSeconds: expectedPos,
       });
+      loadedVideoIdRef.current = data.videoId;
 
       if (data.isPlaying) {
         if (playerRef.current.unMute) playerRef.current.unMute();
@@ -279,20 +368,21 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
           }
         }, 800);
       } else {
-        playerRef.current.pauseVideo();
+        if (playerRef.current.pauseVideo) playerRef.current.pauseVideo();
         setPendingAutoplayJoin(false);
       }
       return;
     }
 
-    // Matching videoId — sync play/pause & position
+    // Matching videoId — sync play/pause & position drift ONLY. NEVER RELOAD.
     if (data.isPlaying) {
       const actualPos = playerRef.current.getCurrentTime ? playerRef.current.getCurrentTime() : 0;
       const drift = Math.abs(actualPos - expectedPos);
       setMeasuredDriftSec(parseFloat(drift.toFixed(2)));
 
       if (drift > 1.5) {
-        playerRef.current.seekTo(expectedPos, true);
+        console.log(`[MusicSync] Drift ${drift.toFixed(2)}s > 1.5s -> seeking to ${expectedPos.toFixed(1)}s`);
+        clampedSeekTo(expectedPos);
       }
 
       if (playerRef.current.getPlayerState() !== 1) {
@@ -320,7 +410,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // 5. High-frequency 500ms ticker for currentTime & duration sync
+  // 5. High-frequency 500ms ticker for currentTime, duration, & defensive end-of-track detection
   useEffect(() => {
     if (!isPlayerReady || !playerRef.current) return;
 
@@ -329,6 +419,17 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
         const cur = playerRef.current.getCurrentTime();
         if (typeof cur === "number" && !isNaN(cur) && cur >= 0) {
           setCurrentTime(Math.floor(cur));
+
+          // BUG 2 & 3 Defensive End-of-Track detection: if position reaches duration - 0.5 while isPlaying
+          const dur = playerRef.current.getDuration ? playerRef.current.getDuration() : 0;
+          if (
+            dur > 0 &&
+            cur >= dur - 0.5 &&
+            currentTrackRef.current?.isPlaying
+          ) {
+            console.log(`[MusicSync] Reached track end boundary (${cur.toFixed(1)}s >= ${(dur - 0.5).toFixed(1)}s) -> handleTrackEnd`);
+            handleTrackEnd();
+          }
         }
       }
       if (playerRef.current && typeof playerRef.current.getDuration === "function") {
@@ -350,31 +451,48 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     }
   }, [currentTrack?.videoId]);
 
-  // 6. Periodic 5-second Drift Correction Loop
+  // BUG 2 & 3 FIX: 6. Periodic 5-second Drift Correction Loop (EXPLICITLY GUARDED to NO-OP when isPlaying is false)
   useEffect(() => {
-    if (!currentTrack?.isPlaying || !isPlayerReady || !playerRef.current) return;
+    if (!currentTrack?.isPlaying || !isPlayerReady || !playerRef.current) {
+      console.log("[MusicSync Drift Engine] Stopped (isPlaying = false)");
+      return;
+    }
+
+    console.log("[MusicSync Drift Engine] Active (isPlaying = true)");
 
     const interval = setInterval(() => {
-      if (!currentTrackRef.current || !currentTrackRef.current.isPlaying) return;
+      // Explicit Guard: NO-OP if isPlaying is false or snapshot is from cache
+      if (
+        !currentTrackRef.current ||
+        !currentTrackRef.current.isPlaying ||
+        isFromCacheRef.current
+      ) {
+        return;
+      }
 
       const data = currentTrackRef.current;
       const updatedAtMs = data.updatedAt?.toDate
         ? data.updatedAt.toDate().getTime()
         : Date.now();
       const elapsedSec = (Date.now() - updatedAtMs) / 1000;
-      const expectedPos = Math.max(0, data.positionAtUpdate + elapsedSec);
+      const rawExpectedPos = Math.max(0, data.positionAtUpdate + elapsedSec);
+      const dur = playerRef.current.getDuration ? playerRef.current.getDuration() : 0;
+      const expectedPos = dur > 0 ? Math.min(rawExpectedPos, Math.max(0, dur - 0.5)) : rawExpectedPos;
 
       const actualPos = playerRef.current.getCurrentTime ? playerRef.current.getCurrentTime() : 0;
       const drift = Math.abs(actualPos - expectedPos);
       setMeasuredDriftSec(parseFloat(drift.toFixed(2)));
 
       if (drift > 1.5) {
-        console.log(`Drift ${drift.toFixed(2)}s > 1.5s threshold — silently seeking to ${expectedPos.toFixed(1)}s`);
-        playerRef.current.seekTo(expectedPos, true);
+        console.log(`[MusicSync Drift Engine] Drift ${drift.toFixed(2)}s > 1.5s -> seeking to ${expectedPos.toFixed(1)}s`);
+        clampedSeekTo(expectedPos);
       }
     }, 5000);
 
-    return () => clearInterval(interval);
+    return () => {
+      console.log("[MusicSync Drift Engine] Stopped (isPlaying = false)");
+      clearInterval(interval);
+    };
   }, [currentTrack?.isPlaying, isPlayerReady]);
 
   // User Action: Join Sync Playback (satisfies browser autoplay gesture)
@@ -386,11 +504,13 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
       ? currentTrack.updatedAt.toDate().getTime()
       : Date.now();
     const elapsedSec = (Date.now() - updatedAtMs) / 1000;
-    const expectedPos = Math.max(0, currentTrack.positionAtUpdate + elapsedSec);
+    const rawExpectedPos = Math.max(0, currentTrack.positionAtUpdate + elapsedSec);
+    const dur = playerRef.current.getDuration ? playerRef.current.getDuration() : 0;
+    const expectedPos = dur > 0 ? Math.min(rawExpectedPos, Math.max(0, dur - 0.5)) : rawExpectedPos;
 
     if (playerRef.current.unMute) playerRef.current.unMute();
     if (playerRef.current.setVolume) playerRef.current.setVolume(localVolume);
-    playerRef.current.seekTo(expectedPos, true);
+    clampedSeekTo(expectedPos);
     playerRef.current.playVideo();
   };
 
@@ -451,9 +571,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     if (!coupleId || !user?.uid || !currentTrack) return;
 
     setCurrentTime(seconds);
-    if (playerRef.current?.seekTo) {
-      playerRef.current.seekTo(seconds, true);
-    }
+    clampedSeekTo(seconds);
 
     const currentDocRef = doc(db, "couples", coupleId, "music", "current");
     await setDoc(
@@ -500,6 +618,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Atomic Track-End Handler: Advances to next song via Firestore Transaction using queueRef
+  // BUG 2 & 3 FIX: Reads LIVE queueRef.current immediately upon execution
   const handleTrackEnd = async () => {
     if (!coupleId || !user?.uid || !currentTrackRef.current) return;
 
@@ -514,7 +633,6 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
         if (!currentSnap.exists()) return;
 
         const liveCurrent = currentSnap.data() as CurrentTrack;
-        // Confirm videoId still matches to prevent duplicate/stale triggers
         if (liveCurrent.videoId !== endingVideoId) return;
 
         if (nextQueueItem) {
@@ -618,6 +736,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
         searchWarning,
         currentTime,
         duration,
+        isReconnecting: !isOnline || isOfflineCache,
         playTrack,
         togglePlayPause,
         seekTo,

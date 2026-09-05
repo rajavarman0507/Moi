@@ -13,6 +13,7 @@ export default function MusicMiniPlayer() {
     togglePlayPause,
     pendingAutoplayJoin,
     joinSyncPlayback,
+    isReconnecting,
   } = useMusic();
   const { user, partnerProfile } = useAuth();
 
@@ -41,9 +42,16 @@ export default function MusicMiniPlayer() {
           </div>
 
           <div className="min-w-0 flex-1">
-            <h4 className="text-xs font-bold text-white truncate group-hover:text-rose-300 transition-colors">
-              {currentTrack.title}
-            </h4>
+            <div className="flex items-center gap-1.5">
+              <h4 className="text-xs font-bold text-white truncate group-hover:text-rose-300 transition-colors">
+                {currentTrack.title}
+              </h4>
+              {isReconnecting && (
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-semibold text-[9px] border border-amber-400/30 shrink-0 animate-pulse">
+                  Reconnecting...
+                </span>
+              )}
+            </div>
             <p className="text-[11px] text-rose-200/60 truncate flex items-center gap-1.5 pt-0.5">
               <span>{currentTrack.channelTitle}</span>
               {isDJPartner && (
