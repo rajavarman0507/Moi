@@ -316,9 +316,6 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
       if (playerRef.current.pauseVideo) {
         playerRef.current.pauseVideo();
       }
-      if (data.positionAtUpdate !== undefined) {
-        playerRef.current.seekTo(data.positionAtUpdate, true);
-      }
       setPendingAutoplayJoin(false);
     }
   };
@@ -415,7 +412,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // User Action: Toggle Play / Pause (preserves paused timestamp)
+  // User Action: Toggle Play / Pause (preserves paused timestamp, restarts if at song end)
   const togglePlayPause = async () => {
     if (!coupleId || !user?.uid || !currentTrack) return;
 
@@ -427,12 +424,21 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const dur = playerRef.current?.getDuration ? playerRef.current.getDuration() : 0;
+    let nextPos = currentPos;
+    let nextIsPlaying = !currentTrack.isPlaying;
+
+    // If resuming playback when track was paused at/near the end, restart from 0
+    if (nextIsPlaying && dur > 0 && currentPos >= dur - 2) {
+      nextPos = 0;
+    }
+
     const currentDocRef = doc(db, "couples", coupleId, "music", "current");
     await setDoc(
       currentDocRef,
       {
-        isPlaying: !currentTrack.isPlaying,
-        positionAtUpdate: currentPos,
+        isPlaying: nextIsPlaying,
+        positionAtUpdate: nextPos,
         updatedAt: serverTimestamp(),
         updatedBy: user.uid,
       },
@@ -536,14 +542,17 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
             });
           }
         } else {
-          // Queue empty -> Stop playback cleanly and remain paused at end
+          // Queue empty -> Stop playback cleanly at end of track without resetting to 0
+          const finalPos = playerRef.current?.getDuration
+            ? Math.floor(playerRef.current.getDuration())
+            : currentTrackRef.current?.positionAtUpdate || 0;
           tx.set(currentDocRef, {
             videoId: endingVideoId,
             title: currentTrackRef.current?.title || "",
             thumbnail: currentTrackRef.current?.thumbnail || "",
             channelTitle: currentTrackRef.current?.channelTitle || "",
             isPlaying: false,
-            positionAtUpdate: 0,
+            positionAtUpdate: finalPos,
             updatedAt: serverTimestamp(),
             updatedBy: user.uid,
           });
