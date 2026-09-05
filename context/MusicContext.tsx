@@ -46,6 +46,8 @@ interface MusicContextType {
   pendingAutoplayJoin: boolean;
   measuredDriftSec: number;
   searchWarning: string | null;
+  currentTime: number;
+  duration: number;
   playTrack: (track: Track) => Promise<void>;
   togglePlayPause: () => Promise<void>;
   seekTo: (seconds: number) => Promise<void>;
@@ -67,6 +69,8 @@ const MusicContext = createContext<MusicContextType>({
   pendingAutoplayJoin: false,
   measuredDriftSec: 0,
   searchWarning: null,
+  currentTime: 0,
+  duration: 0,
   playTrack: async () => {},
   togglePlayPause: async () => {},
   seekTo: async () => {},
@@ -99,10 +103,15 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const [pendingAutoplayJoin, setPendingAutoplayJoin] = useState<boolean>(false);
   const [measuredDriftSec, setMeasuredDriftSec] = useState<number>(0.24);
   const [searchWarning, setSearchWarning] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
 
   const playerRef = useRef<any>(null);
   const currentTrackRef = useRef<CurrentTrack | null>(null);
   currentTrackRef.current = currentTrack;
+
+  const queueRef = useRef<QueueItem[]>([]);
+  queueRef.current = queue;
 
   const isUserActionRef = useRef<boolean>(false);
 
@@ -242,7 +251,10 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     const updatedAtMs = data.updatedAt?.toDate
       ? data.updatedAt.toDate().getTime()
       : Date.now();
-    const elapsedSec = (Date.now() - updatedAtMs) / 1000;
+    // Only calculate elapsedSec if track is actively playing! If paused, elapsedSec is 0.
+    const elapsedSec = data.isPlaying && data.updatedAt?.toDate
+      ? Math.max(0, (Date.now() - updatedAtMs) / 1000)
+      : 0;
     const expectedPos = Math.max(0, data.positionAtUpdate + elapsedSec);
 
     // If video changed
@@ -279,7 +291,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
       const drift = Math.abs(actualPos - expectedPos);
       setMeasuredDriftSec(parseFloat(drift.toFixed(2)));
 
-      if (drift > 1.0) {
+      if (drift > 1.5) {
         playerRef.current.seekTo(expectedPos, true);
       }
 
@@ -311,7 +323,37 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // 5. Periodic 5-second Drift Correction Loop
+  // 5. High-frequency 500ms ticker for currentTime & duration sync
+  useEffect(() => {
+    if (!isPlayerReady || !playerRef.current) return;
+
+    const interval = setInterval(() => {
+      if (playerRef.current && typeof playerRef.current.getCurrentTime === "function") {
+        const cur = playerRef.current.getCurrentTime();
+        if (typeof cur === "number" && !isNaN(cur) && cur >= 0) {
+          setCurrentTime(Math.floor(cur));
+        }
+      }
+      if (playerRef.current && typeof playerRef.current.getDuration === "function") {
+        const dur = playerRef.current.getDuration();
+        if (typeof dur === "number" && !isNaN(dur) && dur > 0) {
+          setDuration(Math.floor(dur));
+        }
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [isPlayerReady, currentTrack?.isPlaying]);
+
+  // Reset currentTime/duration when track changes or unmounts
+  useEffect(() => {
+    if (!currentTrack) {
+      setCurrentTime(0);
+      setDuration(0);
+    }
+  }, [currentTrack?.videoId]);
+
+  // 6. Periodic 5-second Drift Correction Loop
   useEffect(() => {
     if (!currentTrack?.isPlaying || !isPlayerReady || !playerRef.current) return;
 
@@ -329,9 +371,8 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
       const drift = Math.abs(actualPos - expectedPos);
       setMeasuredDriftSec(parseFloat(drift.toFixed(2)));
 
-      // Only seek if drift exceeds 1.0 second threshold to prevent audible stutter
-      if (drift > 1.0) {
-        console.log(`Drift ${drift.toFixed(2)}s > 1.0s threshold — silently seeking to ${expectedPos.toFixed(1)}s`);
+      if (drift > 1.5) {
+        console.log(`Drift ${drift.toFixed(2)}s > 1.5s threshold — silently seeking to ${expectedPos.toFixed(1)}s`);
         playerRef.current.seekTo(expectedPos, true);
       }
     }, 5000);
@@ -360,6 +401,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const playTrack = async (track: Track) => {
     if (!coupleId || !user?.uid) return;
 
+    setCurrentTime(0);
     const currentDocRef = doc(db, "couples", coupleId, "music", "current");
     await setDoc(currentDocRef, {
       videoId: track.videoId,
@@ -373,13 +415,17 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // User Action: Toggle Play / Pause
+  // User Action: Toggle Play / Pause (preserves paused timestamp)
   const togglePlayPause = async () => {
     if (!coupleId || !user?.uid || !currentTrack) return;
 
-    const currentPos = playerRef.current?.getCurrentTime
-      ? playerRef.current.getCurrentTime()
-      : currentTrack.positionAtUpdate;
+    let currentPos = currentTrack.positionAtUpdate;
+    if (playerRef.current && typeof playerRef.current.getCurrentTime === "function") {
+      const p = playerRef.current.getCurrentTime();
+      if (typeof p === "number" && !isNaN(p) && p >= 0) {
+        currentPos = Math.floor(p);
+      }
+    }
 
     const currentDocRef = doc(db, "couples", coupleId, "music", "current");
     await setDoc(
@@ -398,6 +444,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const seekTo = async (seconds: number) => {
     if (!coupleId || !user?.uid || !currentTrack) return;
 
+    setCurrentTime(seconds);
     if (playerRef.current?.seekTo) {
       playerRef.current.seekTo(seconds, true);
     }
@@ -446,13 +493,14 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     await updateDoc(itemDocRef, { order: newOrder });
   };
 
-  // Atomic Track-End Handler: Advances to next song via Firestore Transaction
+  // Atomic Track-End Handler: Advances to next song via Firestore Transaction using queueRef
   const handleTrackEnd = async () => {
     if (!coupleId || !user?.uid || !currentTrackRef.current) return;
 
     const currentDocRef = doc(db, "couples", coupleId, "music", "current");
     const endingVideoId = currentTrackRef.current.videoId;
-    const nextQueueItem = queue.length > 0 ? queue[0] : null;
+    const activeQueue = queueRef.current;
+    const nextQueueItem = activeQueue.length > 0 ? activeQueue[0] : null;
 
     try {
       await runTransaction(db, async (tx) => {
@@ -488,11 +536,16 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
             });
           }
         } else {
-          // Queue empty -> Stop playback
-          tx.update(currentDocRef, {
+          // Queue empty -> Stop playback cleanly and remain paused at end
+          tx.set(currentDocRef, {
+            videoId: endingVideoId,
+            title: currentTrackRef.current?.title || "",
+            thumbnail: currentTrackRef.current?.thumbnail || "",
+            channelTitle: currentTrackRef.current?.channelTitle || "",
             isPlaying: false,
             positionAtUpdate: 0,
             updatedAt: serverTimestamp(),
+            updatedBy: user.uid,
           });
         }
       });
@@ -554,6 +607,8 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
         pendingAutoplayJoin,
         measuredDriftSec,
         searchWarning,
+        currentTime,
+        duration,
         playTrack,
         togglePlayPause,
         seekTo,

@@ -30,6 +30,8 @@ export default function MusicPlayerCard() {
     pendingAutoplayJoin,
     measuredDriftSec,
     searchWarning,
+    currentTime,
+    duration,
     playTrack,
     togglePlayPause,
     seekTo,
@@ -48,24 +50,6 @@ export default function MusicPlayerCard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [seekPos, setSeekPos] = useState<number>(0);
-
-  // Keep seek bar updating
-  useEffect(() => {
-    if (!currentTrack || !isPlaying) return;
-
-    const interval = setInterval(() => {
-      setSeekPos((prev) => prev + 1);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [currentTrack, isPlaying]);
-
-  useEffect(() => {
-    if (currentTrack?.positionAtUpdate !== undefined) {
-      setSeekPos(currentTrack.positionAtUpdate);
-    }
-  }, [currentTrack?.positionAtUpdate, currentTrack?.videoId]);
 
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,18 +183,17 @@ export default function MusicPlayerCard() {
                 <input
                   type="range"
                   min={0}
-                  max={300}
-                  value={seekPos}
+                  max={duration > 0 ? Math.floor(duration) : 100}
+                  value={Math.min(currentTime, duration || 100)}
                   onChange={(e) => {
                     const val = parseFloat(e.target.value);
-                    setSeekPos(val);
                     seekTo(val);
                   }}
                   className="w-full h-2 rounded-lg bg-rose-950 appearance-none cursor-pointer accent-rose-500"
                 />
                 <div className="flex justify-between text-[11px] font-mono text-rose-300/60">
-                  <span>{formatTime(seekPos)}</span>
-                  <span>Live Stream</span>
+                  <span>{formatTime(currentTime)}</span>
+                  <span>{duration > 0 ? formatTime(duration) : "--:--"}</span>
                 </div>
               </div>
 
