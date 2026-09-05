@@ -5,6 +5,14 @@ import { User, onAuthStateChanged, signOut as firebaseSignOut } from "firebase/a
 import { doc, onSnapshot, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
+export interface CallerTune {
+  videoId: string;
+  title: string;
+  artist: string;
+  thumbnail: string;
+  clipStartSec: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
@@ -19,6 +27,7 @@ export interface UserProfile {
   };
   locationSharingEnabled?: boolean;
   onboardingCompleted?: boolean;
+  callerTune?: CallerTune | null;
   createdAt?: any;
 }
 

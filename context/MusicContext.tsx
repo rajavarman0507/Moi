@@ -122,6 +122,41 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   // BUG 1 FIX: Track currently-loaded videoId in a local ref (not component state)
   const loadedVideoIdRef = useRef<string | null>(null);
   const isFromCacheRef = useRef<boolean>(false);
+  const wasPlayingBeforeCallRef = useRef<boolean>(false);
+
+  // Auto pause/resume music during calls
+  useEffect(() => {
+    if (!coupleId) return;
+
+    const callDocRef = doc(db, "couples", coupleId, "call", "current");
+    const unsubscribe = onSnapshot(callDocRef, (snap) => {
+      if (snap.exists()) {
+        const status = snap.data()?.status;
+        if (status === "ringing" || status === "active") {
+          if (playerRef.current && typeof playerRef.current.pauseVideo === "function") {
+            try {
+              const st = playerRef.current.getPlayerState ? playerRef.current.getPlayerState() : -1;
+              if (st === 1 || currentTrackRef.current?.isPlaying) {
+                wasPlayingBeforeCallRef.current = true;
+                playerRef.current.pauseVideo();
+              }
+            } catch (e) {}
+          }
+        } else if (status === "idle" || status === "ended" || status === "rejected" || status === "missed") {
+          if (wasPlayingBeforeCallRef.current) {
+            wasPlayingBeforeCallRef.current = false;
+            if (playerRef.current && typeof playerRef.current.playVideo === "function") {
+              try {
+                playerRef.current.playVideo();
+              } catch (e) {}
+            }
+          }
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [coupleId]);
 
   // 1. Initial Local Volume & Network listeners setup
   useEffect(() => {

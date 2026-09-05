@@ -8,6 +8,7 @@ import MediaPermissionModal from "@/components/MediaPermissionModal";
 import { db } from "@/lib/firebase";
 import {
   doc,
+  getDoc,
   onSnapshot,
   setDoc,
   addDoc,
@@ -16,6 +17,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import { toneManager } from "@/lib/tones";
 import {
   Phone,
   PhoneCall,
@@ -112,6 +114,9 @@ function CallContent() {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const callerTuneYtPlayerRef = useRef<any>(null);
+
+  const [callerTuneTrack, setCallerTuneTrack] = useState<{ videoId: string; clipStartSec: number } | null>(null);
 
   const coupleId = couple?.id;
   const myUid = user?.uid;
@@ -513,6 +518,8 @@ function CallContent() {
     if (!coupleId || !myUid || !partnerUid) return;
 
     try {
+      // 1. Immediately unlock caller AudioContext on user interaction click
+      await toneManager.unlockAudioContext();
       setCallType(typeToUse);
 
       if (callData?.status === "ringing" && callData.callerId === partnerUid) {
@@ -522,6 +529,21 @@ function CallContent() {
       }
 
       setPermissionError(null);
+
+      // 2. Fetch partner's custom caller tune preference (if set)
+      try {
+        const partnerUserDocRef = doc(db, "users", partnerUid);
+        const partnerSnap = await getDoc(partnerUserDocRef);
+        if (partnerSnap.exists() && partnerSnap.data()?.callerTune?.videoId) {
+          const tune = partnerSnap.data().callerTune;
+          setCallerTuneTrack({ videoId: tune.videoId, clipStartSec: tune.clipStartSec || 0 });
+        } else {
+          setCallerTuneTrack(null);
+        }
+      } catch (e) {
+        console.warn("Could not fetch partner caller tune:", e);
+        setCallerTuneTrack(null);
+      }
 
       const stream = await acquireLocalMediaStream(typeToUse);
       localStreamRef.current = stream;
@@ -553,7 +575,7 @@ function CallContent() {
         startedAt: serverTimestamp(),
       });
 
-      setStatusMessage("Calling partner...");
+      setStatusMessage("Ringing...");
       setShowPermissionModal(false);
 
       if (ringingTimeoutRef.current) clearTimeout(ringingTimeoutRef.current);
@@ -572,6 +594,90 @@ function CallContent() {
       setPermissionError("Camera/mic access is needed for calls — please enable it in browser settings.");
     }
   };
+
+  // Caller Ringing Audio Effect (Dial Tone or Partner's Caller Tune)
+  const isCallerRinging = callData?.status === "ringing" && callData?.callerId === myUid;
+
+  useEffect(() => {
+    if (isCallerRinging) {
+      if (callerTuneTrack?.videoId) {
+        const initYtPlayer = () => {
+          if (typeof window === "undefined") return;
+
+          const loadOrInit = () => {
+            if (callerTuneYtPlayerRef.current) {
+              try {
+                callerTuneYtPlayerRef.current.loadVideoById({
+                  videoId: callerTuneTrack.videoId,
+                  startSeconds: callerTuneTrack.clipStartSec || 0,
+                });
+              } catch (e) {}
+              return;
+            }
+
+            if (window.YT && window.YT.Player) {
+              callerTuneYtPlayerRef.current = new window.YT.Player("call-caller-tune-yt-player-container", {
+                height: "0",
+                width: "0",
+                videoId: callerTuneTrack.videoId,
+                playerVars: {
+                  autoplay: 1,
+                  controls: 0,
+                  start: callerTuneTrack.clipStartSec || 0,
+                },
+                events: {
+                  onReady: (event: any) => {
+                    try {
+                      event.target.playVideo();
+                    } catch (e) {}
+                  },
+                  onStateChange: (event: any) => {
+                    // Loop caller tune clip back to start if it ends while ringing
+                    if (event.data === window.YT.PlayerState.ENDED) {
+                      try {
+                        event.target.seekTo(callerTuneTrack.clipStartSec || 0, true);
+                        event.target.playVideo();
+                      } catch (e) {}
+                    }
+                  },
+                },
+              });
+            }
+          };
+
+          if (window.YT && window.YT.Player) {
+            loadOrInit();
+          } else {
+            const tag = document.createElement("script");
+            tag.src = "https://www.youtube.com/iframe_api";
+            const firstScriptTag = document.getElementsByTagName("script")[0];
+            firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
+            window.onYouTubeIframeAPIReady = loadOrInit;
+          }
+        };
+
+        initYtPlayer();
+      } else {
+        toneManager.startDialTone();
+      }
+    } else {
+      toneManager.stopAllTones();
+      if (callerTuneYtPlayerRef.current) {
+        try {
+          callerTuneYtPlayerRef.current.stopVideo();
+        } catch (e) {}
+      }
+    }
+
+    return () => {
+      toneManager.stopAllTones();
+      if (callerTuneYtPlayerRef.current) {
+        try {
+          callerTuneYtPlayerRef.current.stopVideo();
+        } catch (e) {}
+      }
+    };
+  }, [isCallerRinging, callerTuneTrack]);
 
   // Handle Caller Remote Answer Listener
   useEffect(() => {
@@ -1090,6 +1196,9 @@ function CallContent() {
           </div>
         </div>
       )}
+
+      {/* Hidden Off-Screen Dedicated Call Caller-Tune YouTube Container */}
+      <div id="call-caller-tune-yt-player-container" className="hidden w-0 h-0 overflow-hidden" />
     </div>
   );
 }

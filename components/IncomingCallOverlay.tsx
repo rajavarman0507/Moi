@@ -13,7 +13,8 @@ import {
   collection,
   serverTimestamp,
 } from "firebase/firestore";
-import { Phone, PhoneOff, Video, Mic, Sparkles } from "lucide-react";
+import { Phone, PhoneOff, Video, Mic, Sparkles, Volume2 } from "lucide-react";
+import { toneManager } from "@/lib/tones";
 
 interface CallData {
   status: "idle" | "ringing" | "active" | "rejected" | "ended" | "missed";
@@ -33,6 +34,7 @@ export default function IncomingCallOverlay() {
 
   const [callData, setCallData] = useState<CallData | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [showAutoplayBanner, setShowAutoplayBanner] = useState<boolean>(false);
   const notifiedCallIdRef = useRef<string | null>(null);
 
   const coupleId = couple?.id;
@@ -61,11 +63,36 @@ export default function IncomingCallOverlay() {
     return () => unsubscribe();
   }, [coupleId, myUid]);
 
-  // Determine if incoming call modal should display on THIS client
+  // Determine if incoming call modal should display on THIS client (strictly for callee)
   const isIncomingCall =
     callData?.status === "ringing" && callData?.calleeId === myUid;
 
-  // 1. Mandatory Notification Triggering on Incoming Ringing Call
+  // 1. Synthesized Ringtone Playback for Callee
+  useEffect(() => {
+    if (isIncomingCall) {
+      toneManager.startRingtone();
+      if (toneManager.isAutoplayBlocked()) {
+        setShowAutoplayBanner(true);
+      }
+    } else {
+      toneManager.stopAllTones();
+      setShowAutoplayBanner(false);
+    }
+
+    return () => {
+      toneManager.stopAllTones();
+    };
+  }, [isIncomingCall]);
+
+  const handleUnlockAudio = async () => {
+    await toneManager.unlockAudioContext();
+    setShowAutoplayBanner(false);
+    if (isIncomingCall) {
+      toneManager.startRingtone();
+    }
+  };
+
+  // 2. Mandatory Notification Triggering on Incoming Ringing Call
   useEffect(() => {
     if (!isIncomingCall || !coupleId || !myUid || !callData?.callerId) return;
 
@@ -85,7 +112,7 @@ export default function IncomingCallOverlay() {
     }).catch((e) => console.error("Error creating call notification:", e));
   }, [isIncomingCall, coupleId, myUid, callData, partnerName]);
 
-  // 2. Redundant 45-Second Missed-Call & Caller RTDB Disconnect Recovery
+  // 3. Redundant 45-Second Missed-Call & Caller RTDB Disconnect Recovery
   useEffect(() => {
     if (!isIncomingCall || !coupleId) return;
 
@@ -97,6 +124,7 @@ export default function IncomingCallOverlay() {
 
     if (elapsedSeconds > 45 || !partnerOnline) {
       console.log("Caller disconnected or 45s elapsed — auto-resetting call to missed...");
+      toneManager.stopAllTones();
       const callDocRef = doc(db, "couples", coupleId, "call", "current");
       setDoc(
         callDocRef,
@@ -109,10 +137,11 @@ export default function IncomingCallOverlay() {
     }
   }, [isIncomingCall, coupleId, callData, partnerOnline]);
 
-  // 3. Handle Decline Action
+  // 4. Handle Decline Action
   const handleDecline = async () => {
     if (!coupleId || isProcessing) return;
     setIsProcessing(true);
+    toneManager.stopAllTones();
 
     try {
       const callDocRef = doc(db, "couples", coupleId, "call", "current");
@@ -131,10 +160,11 @@ export default function IncomingCallOverlay() {
     }
   };
 
-  // 4. Handle Accept Action
+  // 5. Handle Accept Action
   const handleAccept = async () => {
     if (!coupleId || isProcessing) return;
     setIsProcessing(true);
+    toneManager.stopAllTones();
 
     try {
       // Redirect callee to /call page where RTCPeerConnection SDP Answer will be generated
@@ -149,8 +179,22 @@ export default function IncomingCallOverlay() {
   if (!isIncomingCall) return null;
 
   return (
-    <div className="fixed inset-0 bg-[#12040A]/90 backdrop-blur-xl z-50 flex items-center justify-center p-4">
+    <div
+      onClick={showAutoplayBanner ? handleUnlockAudio : undefined}
+      className="fixed inset-0 bg-[#12040A]/90 backdrop-blur-xl z-50 flex items-center justify-center p-4"
+    >
       <div className="moi-card p-8 max-w-sm w-full bg-gradient-to-br from-[#2D0B1E]/95 via-[#45122C]/95 to-[#1A0512]/95 border border-rose-500/50 space-y-6 text-center shadow-2xl relative overflow-hidden animate-pulse">
+        {/* Autoplay Unlock Banner */}
+        {showAutoplayBanner && (
+          <button
+            onClick={handleUnlockAudio}
+            className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 rounded-xl text-amber-200 text-xs font-bold flex items-center justify-center space-x-2 transition-colors animate-bounce"
+          >
+            <Volume2 className="w-4 h-4 text-amber-300" />
+            <span>Tap anywhere to enable ringtone sound</span>
+          </button>
+        )}
+
         {/* Glowing Call Header Icon */}
         <div className="w-24 h-24 rounded-full border-4 border-rose-500/40 bg-wine-900/80 mx-auto flex items-center justify-center text-white relative shadow-glow">
           {partnerProfile?.photoUrl ? (

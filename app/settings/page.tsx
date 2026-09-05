@@ -31,9 +31,15 @@ import {
   ArrowRight,
   X,
   Calendar,
+  Music,
+  Search,
+  Play,
+  Square,
+  Radio,
+  PhoneCall,
 } from "lucide-react";
 
-type ActiveTab = "profile" | "relationship" | "notifications" | "appearance" | "privacy" | "export";
+type ActiveTab = "profile" | "relationship" | "callertune" | "notifications" | "appearance" | "privacy" | "export";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -83,6 +89,23 @@ export default function SettingsPage() {
   // --- 5. Data Export State ---
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
+  // --- 6. Caller Tune State ---
+  const [callerTune, setCallerTune] = useState<{
+    videoId: string;
+    title: string;
+    artist: string;
+    thumbnail: string;
+    clipStartSec: number;
+  } | null>(null);
+  const [tuneSearchQuery, setTuneSearchQuery] = useState<string>("");
+  const [tuneSearchResults, setTuneSearchResults] = useState<any[]>([]);
+  const [isSearchingTune, setIsSearchingTune] = useState<boolean>(false);
+  const [tuneSearchWarning, setTuneSearchWarning] = useState<string | null>(null);
+  const [clipStartSec, setClipStartSec] = useState<number>(0);
+  const [isSavingTune, setIsSavingTune] = useState<boolean>(false);
+  const [tuneMsg, setTuneMsg] = useState<string | null>(null);
+  const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
+
   const coupleId = couple?.id;
   const myName = userProfile?.displayName || userProfile?.email?.split("@")[0] || "You";
   const partnerName = partnerProfile?.displayName || partnerProfile?.email?.split("@")[0] || "Partner";
@@ -96,8 +119,75 @@ export default function SettingsPage() {
         setAlertPartnerOnline(userProfile.notificationSettings.alertPartnerOnline ?? true);
         setNotifyMoments(userProfile.notificationSettings.notifyMoments ?? true);
       }
+      if (userProfile.callerTune) {
+        setCallerTune(userProfile.callerTune);
+        setClipStartSec(userProfile.callerTune.clipStartSec || 0);
+      } else {
+        setCallerTune(null);
+      }
     }
   }, [userProfile]);
+
+  // Handle Search Caller Tune
+  const handleSearchCallerTune = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tuneSearchQuery.trim()) return;
+    setIsSearchingTune(true);
+    setTuneSearchWarning(null);
+    try {
+      const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(tuneSearchQuery.trim())}`);
+      const data = await res.json();
+      setTuneSearchResults(data.tracks || []);
+      if (data.warning) setTuneSearchWarning(data.warning);
+    } catch (err) {
+      console.error("Caller tune search error:", err);
+    } finally {
+      setIsSearchingTune(false);
+    }
+  };
+
+  // Handle Save Caller Tune
+  const handleSaveCallerTune = async (track: any) => {
+    if (!user?.uid) return;
+    setIsSavingTune(true);
+    setTuneMsg(null);
+    try {
+      const tuneData = {
+        videoId: track.videoId,
+        title: track.title,
+        artist: track.channelTitle || track.artist || "YouTube Artist",
+        thumbnail: track.thumbnail || "",
+        clipStartSec: Number(clipStartSec) || 0,
+      };
+      const userRef = doc(db, "users", user.uid);
+      await setDoc(userRef, { callerTune: tuneData }, { merge: true });
+      setCallerTune(tuneData);
+      setTuneMsg("Caller Tune saved successfully! Callers will now hear this song when ringing you.");
+    } catch (err: any) {
+      console.error("Error saving caller tune:", err);
+      setTuneMsg("Failed to save caller tune.");
+    } finally {
+      setIsSavingTune(false);
+    }
+  };
+
+  // Handle Remove Caller Tune
+  const handleRemoveCallerTune = async () => {
+    if (!user?.uid) return;
+    setIsSavingTune(true);
+    setTuneMsg(null);
+    try {
+      const userRef = doc(db, "users", user.uid);
+      await setDoc(userRef, { callerTune: null }, { merge: true });
+      setCallerTune(null);
+      setTuneMsg("Caller Tune removed. Callers will hear the classic dial tone.");
+    } catch (err: any) {
+      console.error("Error removing caller tune:", err);
+      setTuneMsg("Failed to remove caller tune.");
+    } finally {
+      setIsSavingTune(false);
+    }
+  };
 
   useEffect(() => {
     if (couple) {
@@ -434,6 +524,16 @@ export default function SettingsPage() {
         </button>
 
         <button
+          onClick={() => setActiveTab("callertune")}
+          className={`shrink-0 sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
+            activeTab === "callertune" ? "bg-rose-600 text-white shadow-glow" : "text-rose-300/70 hover:text-white"
+          }`}
+        >
+          <Music className="w-3.5 h-3.5" />
+          <span>Caller Tune</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab("notifications")}
           className={`shrink-0 sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
             activeTab === "notifications" ? "bg-rose-600 text-white shadow-glow" : "text-rose-300/70 hover:text-white"
@@ -660,6 +760,184 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* --- CALLER TUNE SECTION --- */}
+      {activeTab === "callertune" && (
+        <div className="moi-card p-8 bg-wine-950/90 border border-rose-500/30 space-y-6 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-rose-900/40 pb-4">
+            <div className="flex items-center space-x-3">
+              <Music className="w-6 h-6 text-rose-400" />
+              <div>
+                <h2 className="text-lg font-bold text-white">Caller Tune</h2>
+                <p className="text-xs text-rose-200/70">
+                  Set a YouTube song that callers (your partner) hear when ringing you.
+                </p>
+              </div>
+            </div>
+            {callerTune && (
+              <button
+                onClick={handleRemoveCallerTune}
+                disabled={isSavingTune}
+                className="px-3 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 border border-rose-500/40 text-xs font-bold text-rose-400 flex items-center space-x-1.5 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remove Tune</span>
+              </button>
+            )}
+          </div>
+
+          {tuneMsg && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs font-semibold text-rose-300">
+              {tuneMsg}
+            </div>
+          )}
+
+          {/* Current Active Caller Tune Card */}
+          {callerTune ? (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-900/40 to-wine-900/40 border border-rose-500/30 flex flex-col sm:flex-row items-center gap-4">
+              <img
+                src={callerTune.thumbnail || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&h=200&fit=crop"}
+                alt={callerTune.title}
+                className="w-16 h-16 rounded-xl object-cover border border-rose-400/30 shadow-md shrink-0"
+              />
+              <div className="flex-1 text-center sm:text-left space-y-1">
+                <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-extrabold uppercase border border-rose-500/30">
+                  Active Caller Tune
+                </span>
+                <h3 className="text-sm font-bold text-white line-clamp-1">{callerTune.title}</h3>
+                <p className="text-xs text-rose-200/70">{callerTune.artist} • Starts at {callerTune.clipStartSec || 0}s</p>
+              </div>
+              <button
+                onClick={() => setPreviewVideoId(previewVideoId === callerTune.videoId ? null : callerTune.videoId)}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center space-x-1.5 transition-colors shadow-glow shrink-0"
+              >
+                {previewVideoId === callerTune.videoId ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                <span>{previewVideoId === callerTune.videoId ? "Stop Preview" : "Preview"}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-wine-900/20 border border-rose-500/15 text-center space-y-1">
+              <p className="text-xs text-rose-200/70">
+                No custom caller tune set. When your partner calls you, they hear the standard dial tone.
+              </p>
+            </div>
+          )}
+
+          {/* Inline YouTube Preview Player */}
+          {previewVideoId && (
+            <div className="p-4 rounded-2xl bg-black/60 border border-rose-500/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-rose-300">Audio Preview</span>
+                <button
+                  onClick={() => setPreviewVideoId(null)}
+                  className="text-xs text-rose-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="aspect-video w-full max-h-48 rounded-xl overflow-hidden">
+                <iframe
+                  src={`https://www.youtube.com/embed/${previewVideoId}?autoplay=1&start=${callerTune?.clipStartSec || clipStartSec || 0}`}
+                  className="w-full h-full"
+                  allow="autoplay"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Search Section */}
+          <div className="space-y-4 pt-2">
+            <h3 className="text-sm font-bold text-white">Search YouTube Tracks</h3>
+            <form onSubmit={handleSearchCallerTune} className="flex gap-2">
+              <input
+                type="text"
+                value={tuneSearchQuery}
+                onChange={(e) => setTuneSearchQuery(e.target.value)}
+                placeholder="Search song title or artist..."
+                className="flex-1 px-4 py-2.5 rounded-xl bg-[#1B0710] border border-rose-500/30 text-xs font-medium text-white focus:outline-none focus:border-rose-400"
+                style={{ color: "#FFFFFF", backgroundColor: "#1B0710" }}
+              />
+              <button
+                type="submit"
+                disabled={isSearchingTune}
+                className="moi-button-primary px-5 py-2.5 text-xs font-extrabold flex items-center space-x-1.5 shrink-0"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>{isSearchingTune ? "Searching..." : "Search"}</span>
+              </button>
+            </form>
+
+            {tuneSearchWarning && (
+              <p className="text-[11px] text-amber-300 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
+                {tuneSearchWarning}
+              </p>
+            )}
+
+            {/* Clip Start Offset Selector */}
+            <div className="p-4 rounded-xl bg-wine-900/30 border border-rose-500/20 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="space-y-0.5 text-center sm:text-left">
+                <label className="text-xs font-bold text-white">Clip Start Time Offset</label>
+                <p className="text-[11px] text-rose-200/60">Choose where the ringtone clip begins playing in the song (0 to 180 seconds)</p>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <input
+                  type="range"
+                  min="0"
+                  max="180"
+                  step="5"
+                  value={clipStartSec}
+                  onChange={(e) => setClipStartSec(Number(e.target.value))}
+                  className="w-32 accent-rose-500 cursor-pointer"
+                />
+                <span className="text-xs font-mono font-bold text-rose-300 w-12 text-right">
+                  {clipStartSec}s
+                </span>
+              </div>
+            </div>
+
+            {/* Search Results */}
+            {tuneSearchResults.length > 0 && (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {tuneSearchResults.map((track) => (
+                  <div
+                    key={track.videoId}
+                    className="p-3 rounded-xl bg-wine-900/40 hover:bg-wine-900/70 border border-rose-500/20 flex items-center justify-between gap-3 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <img
+                        src={track.thumbnail}
+                        alt={track.title}
+                        className="w-10 h-10 rounded-lg object-cover border border-rose-500/20 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-white truncate">{track.title}</p>
+                        <p className="text-[11px] text-rose-200/60 truncate">{track.channelTitle}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <button
+                        onClick={() => setPreviewVideoId(previewVideoId === track.videoId ? null : track.videoId)}
+                        className="p-2 rounded-lg bg-wine-900 hover:bg-rose-900/60 text-rose-300 hover:text-white transition-colors"
+                        title="Preview Song"
+                      >
+                        {previewVideoId === track.videoId ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => handleSaveCallerTune(track)}
+                        disabled={isSavingTune}
+                        className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-glow"
+                      >
+                        {callerTune?.videoId === track.videoId ? "Saved" : "Set as Tune"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
