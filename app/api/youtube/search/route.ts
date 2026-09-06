@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebaseAdmin";
+import { verifyFirebaseIdToken } from "@/lib/firebaseAdmin";
 
 interface TrackItem {
   videoId: string;
@@ -56,14 +56,14 @@ export async function GET(req: NextRequest) {
   const idToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
 
   if (!idToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized: Missing token" }, { status: 401 });
   }
 
   try {
-    await adminAuth.verifyIdToken(idToken);
-  } catch (authErr) {
-    console.warn("Firebase ID token verification failed:", authErr);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    await verifyFirebaseIdToken(idToken);
+  } catch (authErr: any) {
+    console.error("[Search Route Auth Error] Firebase ID token verification failed:", authErr?.message || authErr);
+    return NextResponse.json({ error: "Unauthorized: Token verification failed", message: authErr?.message }, { status: 401 });
   }
 
   const apiKey = process.env.YOUTUBE_API_KEY;

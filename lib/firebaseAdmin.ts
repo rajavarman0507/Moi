@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import crypto from "crypto";
 
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "moii-8641e";
 
@@ -17,7 +18,7 @@ function initFirebaseAdmin() {
         projectId,
       });
     } catch (e) {
-      console.warn("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY, initializing default app:", e);
+      console.warn("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:", e);
     }
   }
 
@@ -26,3 +27,111 @@ function initFirebaseAdmin() {
 
 const adminApp = initFirebaseAdmin();
 export const adminAuth = getAuth(adminApp);
+
+// Cache for Google's public x509 certs used for RS256 JWT signature verification
+let cachedCerts: { [kid: string]: string } | null = null;
+let certsExpiryTime = 0;
+
+async function fetchGooglePublicCerts(): Promise<{ [kid: string]: string }> {
+  if (cachedCerts && Date.now() < certsExpiryTime) {
+    return cachedCerts;
+  }
+
+  try {
+    const res = await fetch("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com");
+    if (!res.ok) throw new Error(`Google certs status ${res.status}`);
+
+    const cacheControl = res.headers.get("cache-control");
+    let maxAge = 3600;
+    if (cacheControl) {
+      const match = cacheControl.match(/max-age=(\d+)/);
+      if (match && match[1]) maxAge = parseInt(match[1], 10);
+    }
+
+    cachedCerts = await res.json();
+    certsExpiryTime = Date.now() + maxAge * 1000;
+    return cachedCerts || {};
+  } catch (err) {
+    console.error("Failed to fetch Google public certs:", err);
+    return cachedCerts || {};
+  }
+}
+
+/**
+ * Verified Server-Side Firebase ID Token Validation:
+ * 1. Tries Admin SDK verifyIdToken if credentials exist.
+ * 2. Fallbacks to Google Public Certificate RS256 JWT verification if service account credentials are not configured in environment.
+ * 3. Enforces strict issuer (https://securetoken.google.com/<projectId>), audience (<projectId>), expiration, and user UID checks.
+ */
+export async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; email?: string }> {
+  if (!idToken || typeof idToken !== "string") {
+    throw new Error("Missing ID token");
+  }
+
+  // Method A: Admin SDK if service account credentials configured
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    try {
+      const decoded = await adminAuth.verifyIdToken(idToken);
+      return { uid: decoded.uid, email: decoded.email };
+    } catch (adminErr) {
+      console.warn("Admin SDK verifyIdToken failed, attempting public cert validation:", adminErr);
+    }
+  }
+
+  // Method B: Google Public Cert RS256 JWT Signature Verification
+  const parts = idToken.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Invalid JWT token format");
+  }
+
+  const [headerB64, payloadB64, signatureB64] = parts;
+  let header: { alg?: string; kid?: string; typ?: string };
+  let payload: { iss?: string; aud?: string; exp?: number; sub?: string; email?: string; auth_time?: number };
+
+  try {
+    header = JSON.parse(Buffer.from(headerB64, "base64url").toString("utf8"));
+    payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+  } catch (parseErr) {
+    throw new Error("Failed to decode JWT header/payload");
+  }
+
+  // Validate Token Structure & Claims
+  if (header.alg !== "RS256" || !header.kid) {
+    throw new Error("Invalid JWT algorithm or missing Key ID (kid)");
+  }
+
+  const expectedIssuer = `https://securetoken.google.com/${projectId}`;
+  if (payload.iss !== expectedIssuer) {
+    throw new Error(`Invalid token issuer: expected ${expectedIssuer}, got ${payload.iss}`);
+  }
+
+  if (payload.aud !== projectId) {
+    throw new Error(`Invalid token audience: expected ${projectId}, got ${payload.aud}`);
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (!payload.exp || payload.exp <= nowSec) {
+    throw new Error("Firebase ID token has expired");
+  }
+
+  if (!payload.sub || typeof payload.sub !== "string" || payload.sub.trim() === "") {
+    throw new Error("Invalid user UID (sub claim) in token");
+  }
+
+  // Verify Signature using Google Public Certificate
+  const certs = await fetchGooglePublicCerts();
+  const publicCert = certs[header.kid];
+  if (!publicCert) {
+    throw new Error(`Public key for kid ${header.kid} not found in Google certificates`);
+  }
+
+  const verifier = crypto.createVerify("RSA-SHA256");
+  verifier.update(`${headerB64}.${payloadB64}`);
+  const isSignatureValid = verifier.verify(publicCert, signatureB64, "base64url");
+
+  if (!isSignatureValid) {
+    throw new Error("JWT signature verification failed against Google public cert");
+  }
+
+  return { uid: payload.sub, email: payload.email };
+}

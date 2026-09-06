@@ -728,11 +728,16 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
+      const data = await res.json();
       if (!res.ok) {
-        throw new Error(`Proxy error ${res.status}`);
+        if (res.status === 401) {
+          console.error("[Music Search Auth Failure 401]:", data.error || data.message || "Unauthorized ID token");
+        } else {
+          console.error(`[Music Search Server Error ${res.status}]:`, data.error || data.message);
+        }
+        throw new Error(data.error || `Proxy error ${res.status}`);
       }
 
-      const data = await res.json();
       if (data.warning) {
         setSearchWarning(data.warning);
       }
