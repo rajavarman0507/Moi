@@ -179,6 +179,7 @@ export default function SettingsPage() {
     if (!user?.uid) return;
     setIsSavingTune(true);
     setTuneMsg(null);
+    setPreviewVideoId(null);
     try {
       const tuneData = {
         videoId: track.videoId,
@@ -863,14 +864,16 @@ export default function SettingsPage() {
                   Active Caller Tune
                 </span>
                 <h3 className="text-sm font-bold text-white line-clamp-1">{callerTune.title}</h3>
-                <p className="text-xs text-rose-200/70">{callerTune.artist} • Starts at {callerTune.clipStartSec || 0}s</p>
+                <p className="text-xs text-rose-200/70">
+                  {callerTune.artist} • Starts at {callerTune.clipStartSec || 0}s • Loop {callerTune.clipDurationSec || 20}s
+                </p>
               </div>
               <button
                 onClick={() => setPreviewVideoId(previewVideoId === callerTune.videoId ? null : callerTune.videoId)}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center space-x-1.5 transition-colors shadow-glow shrink-0"
               >
                 {previewVideoId === callerTune.videoId ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                <span>{previewVideoId === callerTune.videoId ? "Stop Preview" : "Preview"}</span>
+                <span>{previewVideoId === callerTune.videoId ? "Stop Preview" : "Preview Active Tune"}</span>
               </button>
             </div>
           ) : (
@@ -881,27 +884,52 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Inline YouTube Preview Player */}
-          {previewVideoId && (
-            <div className="p-4 rounded-2xl bg-black/60 border border-rose-500/40 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-rose-300">Audio Preview</span>
-                <button
-                  onClick={() => setPreviewVideoId(null)}
-                  className="text-xs text-rose-400 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+          {/* Clip Configuration Controls */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Clip Start Offset Selector */}
+            <div className="p-4 rounded-xl bg-wine-900/30 border border-rose-500/20 space-y-2">
+              <div className="space-y-0.5">
+                <label className="text-xs font-bold text-white block">Clip Start Time Offset</label>
+                <p className="text-[11px] text-rose-200/60">Start offset in song (0 to 180s)</p>
               </div>
-              <div className="aspect-video w-full max-h-48 rounded-xl overflow-hidden">
-                <iframe
-                  src={`https://www.youtube.com/embed/${previewVideoId}?autoplay=1&start=${callerTune?.clipStartSec || clipStartSec || 0}`}
-                  className="w-full h-full"
-                  allow="autoplay"
+              <div className="flex items-center space-x-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="180"
+                  step="5"
+                  value={clipStartSec}
+                  onChange={(e) => setClipStartSec(Number(e.target.value))}
+                  className="w-full accent-rose-500 cursor-pointer"
                 />
+                <span className="text-xs font-mono font-bold text-rose-300 w-12 text-right shrink-0">
+                  {clipStartSec}s
+                </span>
               </div>
             </div>
-          )}
+
+            {/* Clip Duration Selector */}
+            <div className="p-4 rounded-xl bg-wine-900/30 border border-rose-500/20 space-y-2">
+              <div className="space-y-0.5">
+                <label className="text-xs font-bold text-white block">Clip Loop Duration</label>
+                <p className="text-[11px] text-rose-200/60">Loop window length (10 to 60s)</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="range"
+                  min="10"
+                  max="60"
+                  step="5"
+                  value={clipDurationSec}
+                  onChange={(e) => setClipDurationSec(Number(e.target.value))}
+                  className="w-full accent-rose-500 cursor-pointer"
+                />
+                <span className="text-xs font-mono font-bold text-rose-300 w-12 text-right shrink-0">
+                  {clipDurationSec}s
+                </span>
+              </div>
+            </div>
+          </div>
 
           {/* Search Section */}
           <div className="space-y-4 pt-2">
@@ -931,88 +959,87 @@ export default function SettingsPage() {
               </p>
             )}
 
-            {/* Clip Start Offset Selector */}
-            <div className="p-4 rounded-xl bg-wine-900/30 border border-rose-500/20 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="space-y-0.5 text-center sm:text-left">
-                <label className="text-xs font-bold text-white">Clip Start Time Offset</label>
-                <p className="text-[11px] text-rose-200/60">Choose where the ringtone clip begins playing in the song (0 to 180 seconds)</p>
-              </div>
-              <div className="flex items-center space-x-2 shrink-0">
-                <input
-                  type="range"
-                  min="0"
-                  max="180"
-                  step="5"
-                  value={clipStartSec}
-                  onChange={(e) => setClipStartSec(Number(e.target.value))}
-                  className="w-32 accent-rose-500 cursor-pointer"
-                />
-                <span className="text-xs font-mono font-bold text-rose-300 w-12 text-right">
-                  {clipStartSec}s
-                </span>
-              </div>
-            </div>
-
-            {/* Clip Duration Selector */}
-            <div className="p-4 rounded-xl bg-wine-900/30 border border-rose-500/20 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="space-y-0.5 text-center sm:text-left">
-                <label className="text-xs font-bold text-white">Clip Loop Duration</label>
-                <p className="text-[11px] text-rose-200/60">Choose how many seconds the clip plays before looping back (10 to 60 seconds)</p>
-              </div>
-              <div className="flex items-center space-x-2 shrink-0">
-                <input
-                  type="range"
-                  min="10"
-                  max="60"
-                  step="5"
-                  value={clipDurationSec}
-                  onChange={(e) => setClipDurationSec(Number(e.target.value))}
-                  className="w-32 accent-rose-500 cursor-pointer"
-                />
-                <span className="text-xs font-mono font-bold text-rose-300 w-12 text-right">
-                  {clipDurationSec}s
-                </span>
-              </div>
-            </div>
-
-            {/* Search Results */}
+            {/* Search Results List DIRECTLY BELOW Search Input Form */}
             {tuneSearchResults.length > 0 && (
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {tuneSearchResults.map((track) => (
-                  <div
-                    key={track.videoId}
-                    className="p-3 rounded-xl bg-wine-900/40 hover:bg-wine-900/70 border border-rose-500/20 flex items-center justify-between gap-3 transition-colors"
-                  >
-                    <div className="flex items-center space-x-3 min-w-0">
-                      <img
-                        src={track.thumbnail}
-                        alt={track.title}
-                        className="w-10 h-10 rounded-lg object-cover border border-rose-500/20 shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{track.title}</p>
-                        <p className="text-[11px] text-rose-200/60 truncate">{track.channelTitle}</p>
-                      </div>
-                    </div>
+              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                {tuneSearchResults.map((track) => {
+                  const isCurrentActive = callerTune?.videoId === track.videoId;
+                  const isPreviewing = previewVideoId === track.videoId;
 
-                    <div className="flex items-center space-x-2 shrink-0">
-                      <button
-                        onClick={() => setPreviewVideoId(previewVideoId === track.videoId ? null : track.videoId)}
-                        className="p-2 rounded-lg bg-wine-900 hover:bg-rose-900/60 text-rose-300 hover:text-white transition-colors"
-                        title="Preview Song"
-                      >
-                        {previewVideoId === track.videoId ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                      </button>
-                      <button
-                        onClick={() => handleSaveCallerTune(track)}
-                        disabled={isSavingTune}
-                        className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-glow"
-                      >
-                        {callerTune?.videoId === track.videoId ? "Saved" : "Set as Tune"}
-                      </button>
+                  return (
+                    <div
+                      key={track.videoId}
+                      className="p-3.5 rounded-xl bg-wine-900/40 hover:bg-wine-900/70 border border-rose-500/20 space-y-3 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <img
+                            src={track.thumbnail}
+                            alt={track.title}
+                            className="w-12 h-12 rounded-lg object-cover border border-rose-500/20 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white truncate">{track.title}</p>
+                            <p className="text-[11px] text-rose-200/60 truncate">{track.channelTitle}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewVideoId(isPreviewing ? null : track.videoId)}
+                            className="px-3 py-1.5 rounded-lg bg-wine-900 hover:bg-rose-900/60 text-rose-300 hover:text-white text-xs font-bold flex items-center space-x-1 transition-colors border border-rose-500/20"
+                            title="Preview Song"
+                          >
+                            {isPreviewing ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                            <span>{isPreviewing ? "Stop" : "Preview"}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSaveCallerTune(track)}
+                            disabled={isSavingTune || isCurrentActive}
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center space-x-1.5 transition-all shadow-glow ${
+                              isCurrentActive
+                                ? "bg-emerald-600/30 text-emerald-300 border border-emerald-500/40"
+                                : "bg-rose-600 hover:bg-rose-500 text-white"
+                            }`}
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>{isCurrentActive ? "Active Tune" : "Set as Tune"}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Inline Audio Preview Player Scoped to this Track */}
+                      {isPreviewing && (
+                        <div className="p-3 rounded-xl bg-black/70 border border-rose-500/40 space-y-2 animate-fadeIn">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-rose-300 flex items-center space-x-1">
+                              <Radio className="w-3 h-3 text-amber-300 animate-pulse" />
+                              <span>Audio Preview ({clipStartSec}s offset)</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewVideoId(null)}
+                              className="text-xs text-rose-400 hover:text-white"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="aspect-video w-full max-h-36 rounded-lg overflow-hidden">
+                            <iframe
+                              id={`caller-tune-preview-player-${track.videoId}`}
+                              src={`https://www.youtube.com/embed/${track.videoId}?autoplay=1&start=${clipStartSec}`}
+                              className="w-full h-full"
+                              allow="autoplay"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
