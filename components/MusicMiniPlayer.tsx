@@ -2,11 +2,13 @@
 
 import React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useMusic } from "@/context/MusicContext";
 import { useAuth } from "@/context/AuthContext";
 import { Play, Pause, Music, Volume2, Sparkles, Radio } from "lucide-react";
 
 export default function MusicMiniPlayer() {
+  const pathname = usePathname();
   const {
     currentTrack,
     isPlaying,
@@ -17,7 +19,8 @@ export default function MusicMiniPlayer() {
   } = useMusic();
   const { user, partnerProfile } = useAuth();
 
-  if (!currentTrack) return null;
+  // Hide mini player on /music page or when no track is loaded
+  if (!currentTrack || pathname === "/music") return null;
 
   const isDJPartner =
     currentTrack.updatedBy && currentTrack.updatedBy !== user?.uid;

@@ -115,7 +115,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Scrollable Navigation Items */}
-          <nav className="flex-1 overflow-y-auto pr-1 space-y-1 my-2 scrollbar-thin">
+          <nav className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1 my-2 scrollbar-thin">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
@@ -125,7 +125,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center justify-between px-3 py-2 rounded-2xl text-xs font-medium transition-all ${
+                  className={`flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
                     isActive
                       ? "bg-gradient-to-r from-rose-900/60 to-wine-800/80 text-white border border-rose-500/30 shadow-glow"
                       : "text-rose-200/70 hover:bg-rose-950/40 hover:text-white"
