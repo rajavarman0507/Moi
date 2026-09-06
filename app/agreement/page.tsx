@@ -72,7 +72,7 @@ export default function AgreementPage() {
   useEffect(() => {
     if (!coupleId) return;
 
-    const parentDocRef = doc(db, "couples", coupleId, "agreement", "textDoc");
+    const parentDocRef = doc(db, "couples", coupleId, "agreement", "main");
     getDoc(parentDocRef).then((snap) => {
       if (!snap.exists()) {
         setDoc(
@@ -82,7 +82,7 @@ export default function AgreementPage() {
             createdAt: serverTimestamp(),
           },
           { merge: true }
-        ).catch((err) => console.warn("Error creating parent agreement textDoc:", err));
+        ).catch((err) => console.warn("Error creating parent agreement main doc:", err));
       }
     }).catch((err) => console.warn("Error checking parent agreement doc:", err));
   }, [coupleId]);
@@ -91,7 +91,7 @@ export default function AgreementPage() {
   useEffect(() => {
     if (!coupleId) return;
 
-    const sigsCollRef = collection(db, "couples", coupleId, "agreement", "signatures");
+    const sigsCollRef = collection(db, "couples", coupleId, "agreement", "main", "signatures");
     const unsubscribe = onSnapshot(
       sigsCollRef,
       (snap) => {
@@ -154,7 +154,7 @@ export default function AgreementPage() {
       // Client-side encryption of raw signature PNG Data URL
       const { cipherText, ivHex } = await encryptWithKey(signatureDataUrl, unlockedKey);
 
-      const sigDocRef = doc(db, "couples", coupleId, "agreement", "signatures", myUid);
+      const sigDocRef = doc(db, "couples", coupleId, "agreement", "main", "signatures", myUid);
       await setDoc(sigDocRef, {
         cipherText,
         ivHex,

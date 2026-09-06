@@ -177,14 +177,15 @@ service cloud.firestore {
       }
 
       // Explicit rules for Couple Agreement & Immutable Signatures subcollection
-      match /agreement {
-        allow read, write: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+      match /agreement/main {
+        allow read: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
+        allow write: if false;
 
         match /signatures/{userId} {
           allow create: if isAuthenticated() 
                         && request.auth.uid == userId 
                         && isPartnerInCouple(getCoupleData(coupleId)) 
-                        && !exists(/databases/$(database)/documents/couples/$(coupleId)/agreement/signatures/$(userId));
+                        && !exists(/databases/$(database)/documents/couples/$(coupleId)/agreement/main/signatures/$(userId));
           allow update, delete: if false;
           allow read: if isAuthenticated() && isPartnerInCouple(getCoupleData(coupleId));
         }

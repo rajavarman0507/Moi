@@ -4,7 +4,7 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getDatabase } from "firebase/database";
 
-const DEFAULT_RTDB_URL = "https://moii-8641e-default-rtdb.firebaseio.com";
+const DEFAULT_RTDB_URL = "https://moii-8641e-default-rtdb.firebaseio.com/";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,

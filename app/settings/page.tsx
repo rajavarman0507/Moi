@@ -116,7 +116,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!coupleId) return;
-    const sigsCollRef = collection(db, "couples", coupleId, "agreement", "signatures");
+    const sigsCollRef = collection(db, "couples", coupleId, "agreement", "main", "signatures");
     const unsubscribe = onSnapshot(sigsCollRef, (snap) => {
       setAgreementSigCount(snap.docs.length);
     });
