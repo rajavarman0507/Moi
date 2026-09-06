@@ -1,32 +1,34 @@
 import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { getAuth, Auth } from "firebase-admin/auth";
 import crypto from "crypto";
 
-const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "moii-8641e";
+const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "moi-app-demo";
 
-function initFirebaseAdmin() {
-  if (getApps().length > 0) {
-    return getApp();
-  }
+let adminAuthInstance: Auth | null = null;
 
+function getAdminAuthIfConfigured(): Auth | null {
   const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (serviceAccountKey) {
-    try {
-      const parsedAccount = typeof serviceAccountKey === "string" ? JSON.parse(serviceAccountKey) : serviceAccountKey;
-      return initializeApp({
-        credential: cert(parsedAccount),
-        projectId,
-      });
-    } catch (e) {
-      console.warn("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:", e);
-    }
+  if (!serviceAccountKey) {
+    return null;
   }
 
-  return initializeApp({ projectId });
-}
+  if (adminAuthInstance) {
+    return adminAuthInstance;
+  }
 
-const adminApp = initFirebaseAdmin();
-export const adminAuth = getAuth(adminApp);
+  try {
+    const parsedAccount = typeof serviceAccountKey === "string" ? JSON.parse(serviceAccountKey) : serviceAccountKey;
+    const app = getApps().length > 0 ? getApp() : initializeApp({
+      credential: cert(parsedAccount),
+      projectId,
+    });
+    adminAuthInstance = getAuth(app);
+    return adminAuthInstance;
+  } catch (e) {
+    console.error("Firebase Admin SDK initialization failed, falling back to public cert verification:", e);
+    return null;
+  }
+}
 
 // Cache for Google's public x509 certs used for RS256 JWT signature verification
 let cachedCerts: { [kid: string]: string } | null = null;
@@ -59,26 +61,29 @@ async function fetchGooglePublicCerts(): Promise<{ [kid: string]: string }> {
 
 /**
  * Verified Server-Side Firebase ID Token Validation:
- * 1. Tries Admin SDK verifyIdToken if credentials exist.
- * 2. Fallbacks to Google Public Certificate RS256 JWT verification if service account credentials are not configured in environment.
+ * 1. Tries Admin SDK verifyIdToken if credentials exist (Method A).
+ * 2. Fallbacks to Google Public Certificate RS256 JWT verification if service account credentials are not configured in environment (Method B).
  * 3. Enforces strict issuer (https://securetoken.google.com/<projectId>), audience (<projectId>), expiration, and user UID checks.
  */
-export async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; email?: string }> {
+export async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; email?: string; verificationMethod: string }> {
   if (!idToken || typeof idToken !== "string") {
     throw new Error("Missing ID token");
   }
 
   // Method A: Admin SDK if service account credentials configured
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+  const adminAuth = getAdminAuthIfConfigured();
+  if (adminAuth) {
     try {
       const decoded = await adminAuth.verifyIdToken(idToken);
-      return { uid: decoded.uid, email: decoded.email };
+      console.log("[Auth] Successfully verified Firebase ID Token via Method A (Admin SDK)");
+      return { uid: decoded.uid, email: decoded.email, verificationMethod: "Method A (Admin SDK)" };
     } catch (adminErr) {
       console.warn("Admin SDK verifyIdToken failed, attempting public cert validation:", adminErr);
     }
   }
 
   // Method B: Google Public Cert RS256 JWT Signature Verification
+  console.log(`[Auth] Verifying Firebase ID Token via Method B (Google Public Cert RS256) for projectId '${projectId}'`);
   const parts = idToken.split(".");
   if (parts.length !== 3) {
     throw new Error("Invalid JWT token format");
@@ -133,5 +138,6 @@ export async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: str
     throw new Error("JWT signature verification failed against Google public cert");
   }
 
-  return { uid: payload.sub, email: payload.email };
+  return { uid: payload.sub, email: payload.email, verificationMethod: "Method B (Google Public Cert RS256)" };
 }
+
