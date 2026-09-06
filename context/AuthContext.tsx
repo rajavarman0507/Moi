@@ -11,6 +11,7 @@ export interface CallerTune {
   artist: string;
   thumbnail: string;
   clipStartSec: number;
+  clipDurationSec?: number;
 }
 
 export interface UserProfile {

@@ -18,6 +18,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { toneManager } from "@/lib/tones";
+import { loadYouTubeIframeApi } from "@/lib/youtubeApiLoader";
 import {
   Phone,
   PhoneCall,
@@ -116,7 +117,7 @@ function CallContent() {
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const callerTuneYtPlayerRef = useRef<any>(null);
 
-  const [callerTuneTrack, setCallerTuneTrack] = useState<{ videoId: string; clipStartSec: number } | null>(null);
+  const [callerTuneTrack, setCallerTuneTrack] = useState<{ videoId: string; clipStartSec: number; clipDurationSec: number } | null>(null);
 
   const coupleId = couple?.id;
   const myUid = user?.uid;
@@ -536,7 +537,11 @@ function CallContent() {
         const partnerSnap = await getDoc(partnerUserDocRef);
         if (partnerSnap.exists() && partnerSnap.data()?.callerTune?.videoId) {
           const tune = partnerSnap.data().callerTune;
-          setCallerTuneTrack({ videoId: tune.videoId, clipStartSec: tune.clipStartSec || 0 });
+          setCallerTuneTrack({
+            videoId: tune.videoId,
+            clipStartSec: tune.clipStartSec || 0,
+            clipDurationSec: tune.clipDurationSec || 20,
+          });
         } else {
           setCallerTuneTrack(null);
         }
@@ -599,12 +604,14 @@ function CallContent() {
   const isCallerRinging = callData?.status === "ringing" && callData?.callerId === myUid;
 
   useEffect(() => {
+    let loopInterval: NodeJS.Timeout | null = null;
+
     if (isCallerRinging) {
       if (callerTuneTrack?.videoId) {
-        const initYtPlayer = () => {
-          if (typeof window === "undefined") return;
+        loadYouTubeIframeApi()
+          .then((YT) => {
+            if (!isCallerRinging) return;
 
-          const loadOrInit = () => {
             if (callerTuneYtPlayerRef.current) {
               try {
                 callerTuneYtPlayerRef.current.loadVideoById({
@@ -612,11 +619,8 @@ function CallContent() {
                   startSeconds: callerTuneTrack.clipStartSec || 0,
                 });
               } catch (e) {}
-              return;
-            }
-
-            if (window.YT && window.YT.Player) {
-              callerTuneYtPlayerRef.current = new window.YT.Player("call-caller-tune-yt-player-container", {
+            } else if (YT && YT.Player) {
+              callerTuneYtPlayerRef.current = new YT.Player("call-caller-tune-yt-player-container", {
                 height: "0",
                 width: "0",
                 videoId: callerTuneTrack.videoId,
@@ -632,7 +636,6 @@ function CallContent() {
                     } catch (e) {}
                   },
                   onStateChange: (event: any) => {
-                    // Loop caller tune clip back to start if it ends while ringing
                     if (event.data === window.YT.PlayerState.ENDED) {
                       try {
                         event.target.seekTo(callerTuneTrack.clipStartSec || 0, true);
@@ -643,20 +646,29 @@ function CallContent() {
                 },
               });
             }
-          };
 
-          if (window.YT && window.YT.Player) {
-            loadOrInit();
-          } else {
-            const tag = document.createElement("script");
-            tag.src = "https://www.youtube.com/iframe_api";
-            const firstScriptTag = document.getElementsByTagName("script")[0];
-            firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
-            window.onYouTubeIframeAPIReady = loadOrInit;
-          }
-        };
-
-        initYtPlayer();
+            // Periodic interval (~every 500ms) to check current playback time vs clipStartSec + clipDurationSec
+            loopInterval = setInterval(() => {
+              if (
+                callerTuneYtPlayerRef.current &&
+                typeof callerTuneYtPlayerRef.current.getCurrentTime === "function"
+              ) {
+                try {
+                  const currTime = callerTuneYtPlayerRef.current.getCurrentTime();
+                  const start = callerTuneTrack.clipStartSec || 0;
+                  const duration = callerTuneTrack.clipDurationSec || 20;
+                  if (currTime >= start + duration) {
+                    console.log(`[CallerTune] Clip loop triggered: ${currTime}s >= ${start + duration}s -> seeking to ${start}s`);
+                    callerTuneYtPlayerRef.current.seekTo(start, true);
+                  }
+                } catch (e) {}
+              }
+            }, 500);
+          })
+          .catch((err) => {
+            console.error("Failed to load YouTube IFrame API for caller tune:", err);
+            toneManager.startDialTone();
+          });
       } else {
         toneManager.startDialTone();
       }
@@ -670,6 +682,7 @@ function CallContent() {
     }
 
     return () => {
+      if (loopInterval) clearInterval(loopInterval);
       toneManager.stopAllTones();
       if (callerTuneYtPlayerRef.current) {
         try {

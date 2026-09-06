@@ -27,8 +27,14 @@ service cloud.firestore {
     // Stores user profile info (name, email, coupleId, onboardingCompleted)
     // =========================================================================
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isUser(userId);
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.coupleId ==
+         get(/databases/$(database)/documents/users/$(userId)).data.coupleId &&
+         get(/databases/$(database)/documents/users/$(userId)).data.coupleId != null)
+      );
+      allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // =========================================================================

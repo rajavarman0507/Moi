@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { loadYouTubeIframeApi } from "@/lib/youtubeApiLoader";
 import { db } from "@/lib/firebase";
 import {
   doc,
@@ -89,8 +90,8 @@ export const useMusic = () => useContext(MusicContext);
 
 declare global {
   interface Window {
-    YT: any;
-    onYouTubeIframeAPIReady: () => void;
+    YT?: any;
+    onYouTubeIframeAPIReady?: () => void;
   }
 }
 
@@ -178,27 +179,13 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // 2. Load YouTube IFrame Player API Script
+  // 2. Load YouTube IFrame Player API Script via Singleton Loader
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const initYT = () => {
-      if (window.YT && window.YT.Player) {
-        createGlobalPlayer();
-      } else {
-        window.onYouTubeIframeAPIReady = () => {
-          createGlobalPlayer();
-        };
-
-        if (!document.getElementById("yt-iframe-api-script")) {
-          const tag = document.createElement("script");
-          tag.id = "yt-iframe-api-script";
-          tag.src = "https://www.youtube.com/iframe_api";
-          const firstScriptTag = document.getElementsByTagName("script")[0];
-          firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
-        }
-      }
-    };
+    loadYouTubeIframeApi()
+      .then(() => createGlobalPlayer())
+      .catch((err) => console.error("Error loading YouTube IFrame API:", err));
 
     const createGlobalPlayer = () => {
       if (playerRef.current) return;
@@ -247,8 +234,6 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
         },
       });
     };
-
-    initYT();
   }, []);
 
   // Synchronize playback whenever player becomes ready or track changes
@@ -736,9 +721,10 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const searchTracks = async (q: string): Promise<Track[]> => {
     try {
       setSearchWarning(null);
+      const token = user ? await user.getIdToken() : "";
       const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(q)}`, {
         headers: {
-          Authorization: `Bearer ${user?.uid || "authenticated"}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 

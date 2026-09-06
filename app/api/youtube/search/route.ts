@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminAuth } from "@/lib/firebaseAdmin";
 
 interface TrackItem {
   videoId: string;
@@ -50,9 +51,18 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const query = searchParams.get("q") || "";
 
-  // 1. Basic Authorization Check: Reject unauthenticated public scraping requests
+  // 1. Genuine Server-Side Firebase ID Token Verification
   const authHeader = req.headers.get("authorization");
-  if (!authHeader && process.env.NODE_ENV === "production") {
+  const idToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
+
+  if (!idToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    await adminAuth.verifyIdToken(idToken);
+  } catch (authErr) {
+    console.warn("Firebase ID token verification failed:", authErr);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -97,12 +97,14 @@ export default function SettingsPage() {
     artist: string;
     thumbnail: string;
     clipStartSec: number;
+    clipDurationSec?: number;
   } | null>(null);
   const [tuneSearchQuery, setTuneSearchQuery] = useState<string>("");
   const [tuneSearchResults, setTuneSearchResults] = useState<any[]>([]);
   const [isSearchingTune, setIsSearchingTune] = useState<boolean>(false);
   const [tuneSearchWarning, setTuneSearchWarning] = useState<string | null>(null);
   const [clipStartSec, setClipStartSec] = useState<number>(0);
+  const [clipDurationSec, setClipDurationSec] = useState<number>(20);
   const [isSavingTune, setIsSavingTune] = useState<boolean>(false);
   const [tuneMsg, setTuneMsg] = useState<string | null>(null);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
@@ -135,11 +137,19 @@ export default function SettingsPage() {
       if (userProfile.callerTune) {
         setCallerTune(userProfile.callerTune);
         setClipStartSec(userProfile.callerTune.clipStartSec || 0);
+        setClipDurationSec(userProfile.callerTune.clipDurationSec || 20);
       } else {
         setCallerTune(null);
       }
     }
   }, [userProfile]);
+
+  // Teardown inline preview player when tab changes
+  useEffect(() => {
+    if (activeTab !== "callertune") {
+      setPreviewVideoId(null);
+    }
+  }, [activeTab]);
 
   // Handle Search Caller Tune
   const handleSearchCallerTune = async (e: React.FormEvent) => {
@@ -148,9 +158,10 @@ export default function SettingsPage() {
     setIsSearchingTune(true);
     setTuneSearchWarning(null);
     try {
+      const token = user ? await user.getIdToken() : "";
       const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(tuneSearchQuery.trim())}`, {
         headers: {
-          Authorization: `Bearer ${user?.uid || "authenticated"}`,
+          Authorization: `Bearer ${token}`,
         },
       });
       const data = await res.json();
@@ -175,6 +186,7 @@ export default function SettingsPage() {
         artist: track.channelTitle || track.artist || "YouTube Artist",
         thumbnail: track.thumbnail || "",
         clipStartSec: Number(clipStartSec) || 0,
+        clipDurationSec: Number(clipDurationSec) || 20,
       };
       const userRef = doc(db, "users", user.uid);
       await setDoc(userRef, { callerTune: tuneData }, { merge: true });
@@ -937,6 +949,28 @@ export default function SettingsPage() {
                 />
                 <span className="text-xs font-mono font-bold text-rose-300 w-12 text-right">
                   {clipStartSec}s
+                </span>
+              </div>
+            </div>
+
+            {/* Clip Duration Selector */}
+            <div className="p-4 rounded-xl bg-wine-900/30 border border-rose-500/20 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="space-y-0.5 text-center sm:text-left">
+                <label className="text-xs font-bold text-white">Clip Loop Duration</label>
+                <p className="text-[11px] text-rose-200/60">Choose how many seconds the clip plays before looping back (10 to 60 seconds)</p>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <input
+                  type="range"
+                  min="10"
+                  max="60"
+                  step="5"
+                  value={clipDurationSec}
+                  onChange={(e) => setClipDurationSec(Number(e.target.value))}
+                  className="w-32 accent-rose-500 cursor-pointer"
+                />
+                <span className="text-xs font-mono font-bold text-rose-300 w-12 text-right">
+                  {clipDurationSec}s
                 </span>
               </div>
             </div>
