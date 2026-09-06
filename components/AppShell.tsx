@@ -28,6 +28,7 @@ import {
   MessageCircle,
   PhoneCall,
   Radio,
+  FileCheck,
 } from "lucide-react";
 
 interface NavItem {
@@ -39,6 +40,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: "Home", href: "/", icon: Home },
   { name: "Chat", href: "/chat", icon: MessageCircle },
+  { name: "Agreement", href: "/agreement", icon: FileCheck },
   { name: "Call", href: "/call", icon: PhoneCall },
   { name: "Music", href: "/music", icon: Radio },
   { name: "Doodle", href: "/doodle", icon: Palette },

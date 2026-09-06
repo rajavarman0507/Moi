@@ -6,9 +6,9 @@ import { useAuth } from "@/context/AuthContext";
 import { getDailyPromptForDate, DailyPrompt } from "@/lib/dailyPrompt";
 import CandleMode from "@/components/CandleMode";
 import MomentsStrip from "@/components/MomentsStrip";
-import { Heart, Calendar, Gamepad2, Sparkles, Lock, Layers, ArrowRight, CheckCircle2, Palette } from "lucide-react";
+import { Heart, Calendar, Gamepad2, Sparkles, Lock, Layers, ArrowRight, CheckCircle2, Palette, FileCheck } from "lucide-react";
 import Link from "next/link";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getUtcDateString } from "@/lib/dateUtils";
 
@@ -20,6 +20,7 @@ export default function HomePage() {
   const [monthsYears, setMonthsYears] = useState<string>("");
   const [dailyPrompt, setDailyPrompt] = useState<DailyPrompt | null>(null);
   const [promptCompleted, setPromptCompleted] = useState<boolean>(false);
+  const [agreementSigCount, setAgreementSigCount] = useState<number>(2); // Default 2 to avoid layout flicker
 
   const utcToday = getUtcDateString();
 
@@ -48,6 +49,15 @@ export default function HomePage() {
       }).catch((err) => console.warn("Prompt complete check error:", err));
     }
   }, [utcToday, couple, user]);
+
+  useEffect(() => {
+    if (!couple?.id) return;
+    const sigsCollRef = collection(db, "couples", couple.id, "agreement", "signatures");
+    const unsubscribe = onSnapshot(sigsCollRef, (snap) => {
+      setAgreementSigCount(snap.docs.length);
+    });
+    return () => unsubscribe();
+  }, [couple?.id]);
 
   useEffect(() => {
     if (couple?.togetherSince && couple.id) {
@@ -148,6 +158,32 @@ export default function HomePage() {
           <span>Paired Account</span>
         </div>
       </div>
+
+      {/* Agreement Prompt Banner if Not Fully Signed */}
+      {agreementSigCount < 2 && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-900/60 to-wine-900/60 border border-rose-500/40 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 shrink-0">
+              <FileCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-white">Sign your Couple Agreement 💌</h3>
+              <p className="text-[11px] text-rose-200/70">
+                {agreementSigCount === 1
+                  ? "1 partner has signed! Add your signature to complete your Keepsake Certificate."
+                  : "Make symbolic promises and attach your encrypted signatures."}
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/agreement"
+            className="moi-button-primary px-4 py-2 text-xs font-extrabold flex items-center space-x-1.5 shrink-0 shadow-glow"
+          >
+            <span>{agreementSigCount === 1 ? "Complete Agreement" : "Sign Now"}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* Top Grid: Hero Counter + Candle Mode */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

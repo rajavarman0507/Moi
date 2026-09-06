@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useLocation } from "@/context/LocationContext";
 import { db, storage, googleProvider } from "@/lib/firebase";
-import { doc, getDoc, getDocs, collection, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, getDocs, collection, setDoc, deleteDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, deleteUser } from "firebase/auth";
 import { derivePbkdf2Hash, reencryptAllLettersAtomic, decryptLetter } from "@/lib/cryptoUtils";
@@ -37,6 +37,7 @@ import {
   Square,
   Radio,
   PhoneCall,
+  FileCheck,
 } from "lucide-react";
 
 type ActiveTab = "profile" | "relationship" | "callertune" | "notifications" | "appearance" | "privacy" | "export";
@@ -106,9 +107,21 @@ export default function SettingsPage() {
   const [tuneMsg, setTuneMsg] = useState<string | null>(null);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
 
+  // Agreement Signatures Count State
+  const [agreementSigCount, setAgreementSigCount] = useState<number>(0);
+
   const coupleId = couple?.id;
   const myName = userProfile?.displayName || userProfile?.email?.split("@")[0] || "You";
   const partnerName = partnerProfile?.displayName || partnerProfile?.email?.split("@")[0] || "Partner";
+
+  useEffect(() => {
+    if (!coupleId) return;
+    const sigsCollRef = collection(db, "couples", coupleId, "agreement", "signatures");
+    const unsubscribe = onSnapshot(sigsCollRef, (snap) => {
+      setAgreementSigCount(snap.docs.length);
+    });
+    return () => unsubscribe();
+  }, [coupleId]);
 
   useEffect(() => {
     if (userProfile) {
@@ -680,6 +693,33 @@ export default function SettingsPage() {
             >
               Update Anniversary Date
             </button>
+          </div>
+
+          {/* Couple Agreement Status Section */}
+          <div className="pt-8 border-t border-rose-900/40 space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-wine-900/30 border border-rose-500/20">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                  <FileCheck className="w-4 h-4 text-amber-300" />
+                  <span>Symbolic Couple Agreement</span>
+                </h3>
+                <p className="text-xs text-rose-200/70">
+                  {agreementSigCount === 2
+                    ? "Fully signed by both partners 📜 Keepsake Certificate active."
+                    : agreementSigCount === 1
+                    ? "1 partner has signed — waiting for second signature."
+                    : "Not yet signed. Make symbolic bonding promises together."}
+                </p>
+              </div>
+
+              <button
+                onClick={() => router.push("/agreement")}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-glow shrink-0 flex items-center space-x-1.5"
+              >
+                <span>{agreementSigCount === 2 ? "View Certificate 📜" : "Open Agreement 💌"}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           {/* Unpair Section */}
