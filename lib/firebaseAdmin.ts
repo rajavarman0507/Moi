@@ -1,12 +1,10 @@
-import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
-import { getAuth, Auth } from "firebase-admin/auth";
 import crypto from "crypto";
 
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "moi-app-demo";
 
-let adminAuthInstance: Auth | null = null;
+let adminAuthInstance: any = null;
 
-function getAdminAuthIfConfigured(): Auth | null {
+function getAdminAuthIfConfigured(): any {
   const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (!serviceAccountKey) {
     return null;
@@ -17,6 +15,9 @@ function getAdminAuthIfConfigured(): Auth | null {
   }
 
   try {
+    const { initializeApp, getApps, getApp, cert } = require("firebase-admin/app");
+    const { getAuth } = require("firebase-admin/auth");
+
     const parsedAccount = typeof serviceAccountKey === "string" ? JSON.parse(serviceAccountKey) : serviceAccountKey;
     const app = getApps().length > 0 ? getApp() : initializeApp({
       credential: cert(parsedAccount),
@@ -29,6 +30,7 @@ function getAdminAuthIfConfigured(): Auth | null {
     return null;
   }
 }
+
 
 // Cache for Google's public x509 certs used for RS256 JWT signature verification
 let cachedCerts: { [kid: string]: string } | null = null;
