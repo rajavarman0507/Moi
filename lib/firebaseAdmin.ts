@@ -107,14 +107,21 @@ export async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: str
     throw new Error("Invalid JWT algorithm or missing Key ID (kid)");
   }
 
-  const expectedIssuer = `https://securetoken.google.com/${projectId}`;
+  const allowedProjectIds = Array.from(new Set([
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    "moi-app-demo",
+    "moii-8641e"
+  ])).filter(Boolean) as string[];
+
+  if (!payload.aud || !allowedProjectIds.includes(payload.aud)) {
+    throw new Error(`Invalid token audience: expected one of [${allowedProjectIds.join(", ")}], got ${payload.aud}`);
+  }
+
+  const expectedIssuer = `https://securetoken.google.com/${payload.aud}`;
   if (payload.iss !== expectedIssuer) {
     throw new Error(`Invalid token issuer: expected ${expectedIssuer}, got ${payload.iss}`);
   }
 
-  if (payload.aud !== projectId) {
-    throw new Error(`Invalid token audience: expected ${projectId}, got ${payload.aud}`);
-  }
 
   const nowSec = Math.floor(Date.now() / 1000);
   if (!payload.exp || payload.exp <= nowSec) {
