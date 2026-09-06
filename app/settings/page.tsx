@@ -148,7 +148,11 @@ export default function SettingsPage() {
     setIsSearchingTune(true);
     setTuneSearchWarning(null);
     try {
-      const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(tuneSearchQuery.trim())}`);
+      const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(tuneSearchQuery.trim())}`, {
+        headers: {
+          Authorization: `Bearer ${user?.uid || "authenticated"}`,
+        },
+      });
       const data = await res.json();
       setTuneSearchResults(data.tracks || []);
       if (data.warning) setTuneSearchWarning(data.warning);
