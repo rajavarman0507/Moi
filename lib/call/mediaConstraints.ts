@@ -71,24 +71,44 @@ export async function configureVideoSender(sender: RTCRtpSender): Promise<void> 
 }
 
 /**
- * Ensure in-band FEC and cap maxaveragebitrate in Opus SDP line
+ * Ensure in-band FEC and cap maxaveragebitrate in Opus SDP line.
+ * Dynamically resolves Opus payload type from the "a=rtpmap:<n> opus/48000/2" line,
+ * and wraps everything in try/catch so a failure can never block call establishment.
  */
 export function optimizeOpusSdp(sdp?: string): string | undefined {
   if (!sdp) return sdp;
-  return sdp.replace(/a=fmtp:111 (.*)/g, (match, p1) => {
-    // If maxaveragebitrate is already in line, replace it; otherwise append
-    let line = p1;
-    if (!line.includes("useinbandfec=1")) {
-      line += ";useinbandfec=1";
+  try {
+    const rtpmapMatch = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000\/2/i);
+    const payloadType = rtpmapMatch ? rtpmapMatch[1] : "111";
+
+    const fmtpRegex = new RegExp(`a=fmtp:${payloadType} (.*)`, "g");
+    if (!fmtpRegex.test(sdp)) {
+      if (rtpmapMatch) {
+        return sdp.replace(
+          rtpmapMatch[0],
+          `${rtpmapMatch[0]}\r\na=fmtp:${payloadType} useinbandfec=1;stereo=0;maxaveragebitrate=48000`
+        );
+      }
+      return sdp;
     }
-    if (!line.includes("stereo=0")) {
-      line += ";stereo=0";
-    }
-    if (line.includes("maxaveragebitrate=")) {
-      line = line.replace(/maxaveragebitrate=\d+/, "maxaveragebitrate=48000");
-    } else {
-      line += ";maxaveragebitrate=48000";
-    }
-    return `a=fmtp:111 ${line}`;
-  });
+
+    return sdp.replace(new RegExp(`a=fmtp:${payloadType} (.*)`, "g"), (_match, p1) => {
+      let line = p1;
+      if (!line.includes("useinbandfec=1")) {
+        line += ";useinbandfec=1";
+      }
+      if (!line.includes("stereo=0")) {
+        line += ";stereo=0";
+      }
+      if (line.includes("maxaveragebitrate=")) {
+        line = line.replace(/maxaveragebitrate=\d+/, "maxaveragebitrate=48000");
+      } else {
+        line += ";maxaveragebitrate=48000";
+      }
+      return `a=fmtp:${payloadType} ${line}`;
+    });
+  } catch (err) {
+    // If anything fails in regex manipulation, return completely unmodified SDP
+    return sdp;
+  }
 }

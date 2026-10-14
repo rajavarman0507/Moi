@@ -11,24 +11,42 @@ export const DEFAULT_RTC_CONFIG: RTCConfiguration = {
   iceCandidatePoolSize: 2,
 };
 
+export let lastTurnHttpStatus: string = "unfetched";
+
+export function getLastTurnHttpStatus(): string {
+  return lastTurnHttpStatus;
+}
+
 /**
  * Fetch authenticated ICE servers (STUN + TURN) from our secure API endpoint.
  * Falls back to default STUN servers if fetch fails or user is unauthenticated.
+ * Enforces a strict 3-second AbortController timeout so call setup never stalls.
  */
 export async function fetchRtcConfig(getIdToken?: () => Promise<string>): Promise<RTCConfiguration> {
   if (!getIdToken) {
+    lastTurnHttpStatus = "no-auth";
     return DEFAULT_RTC_CONFIG;
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
+
   try {
     const token = await getIdToken();
-    if (!token) return DEFAULT_RTC_CONFIG;
+    if (!token) {
+      clearTimeout(timeoutId);
+      lastTurnHttpStatus = "no-token";
+      return DEFAULT_RTC_CONFIG;
+    }
 
     const res = await fetch("/api/turn", {
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+    lastTurnHttpStatus = `${res.status}`;
 
     if (!res.ok) {
       console.warn(`[ICE Config] Failed to fetch /api/turn (${res.status}), using default STUN.`);
@@ -42,7 +60,13 @@ export async function fetchRtcConfig(getIdToken?: () => Promise<string>): Promis
         iceCandidatePoolSize: 2,
       };
     }
-  } catch (err) {
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err?.name === "AbortError") {
+      lastTurnHttpStatus = "timeout (3s)";
+    } else {
+      lastTurnHttpStatus = `error (${err?.name || "fetch"})`;
+    }
     console.warn("[ICE Config] Error fetching TURN configuration:", err);
   }
 

@@ -20,7 +20,7 @@ import {
 } from "firebase/firestore";
 import { toneManager } from "@/lib/tones";
 import { loadYouTubeIframeApi } from "@/lib/youtubeApiLoader";
-import { fetchRtcConfig, DEFAULT_RTC_CONFIG } from "@/lib/call/rtcConfig";
+import { fetchRtcConfig, DEFAULT_RTC_CONFIG, getLastTurnHttpStatus } from "@/lib/call/rtcConfig";
 import {
   IDEAL_AUDIO_CONSTRAINTS,
   IDEAL_VIDEO_CONSTRAINTS_USER,
@@ -108,6 +108,12 @@ function CallContent() {
   // Diagnostics & Quality Stats
   const [callStats, setCallStats] = useState<CallStatsSnapshot | null>(null);
   const [showDebugOverlay, setShowDebugOverlay] = useState<boolean>(CALL_DEBUG_ENABLED);
+  const [signalingState, setSignalingState] = useState<string>("idle");
+  const [iceConnectionState, setIceConnectionState] = useState<string>("new");
+  const [peerConnectionState, setPeerConnectionState] = useState<string>("new");
+  const [ontrackFired, setOntrackFired] = useState<boolean>(false);
+  const [firstErrorName, setFirstErrorName] = useState<string | null>(null);
+  const [showAudioUnlockButton, setShowAudioUnlockButton] = useState<boolean>(false);
 
   // WebRTC & DOM Refs
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -126,6 +132,8 @@ function CallContent() {
   const isSettingRemoteAnswerPendingRef = useRef<boolean>(false);
   const lastAppliedOfferRef = useRef<string | null>(null);
   const lastAppliedAnswerRef = useRef<string | null>(null);
+  // Initial handshake guard: callee must never create an offer during the initial handshake
+  const isInitialHandshakePendingRef = useRef<boolean>(true);
 
   // Pre-Call Live Camera Preview State & Refs
   const [preCallPreviewActive, setPreCallPreviewActive] = useState<boolean>(false);
@@ -143,8 +151,9 @@ function CallContent() {
   const myUid = user?.uid;
   const partnerUid = couple?.userIds?.find((id) => id !== myUid);
 
-  // Deterministic polite assignment: exactly one peer is polite without extra round-trips
-  const polite = Boolean(myUid && partnerUid && myUid > partnerUid);
+  // Root Cause Fix 1: Derive polite role directly from call document (callee is polite, caller is impolite)
+  // This never depends on asynchronous partner profile loading
+  const polite = Boolean(callData && myUid && callData.calleeId === myUid);
 
   const myName = userProfile?.displayName || "You";
   const partnerName = partnerProfile?.displayName || "Partner";
@@ -443,7 +452,10 @@ function CallContent() {
         remoteVideoRef.current.srcObject = remoteStream;
       }
       remoteVideoRef.current.muted = true;
-      remoteVideoRef.current.play().catch((err) => devLog("Remote video play notice:", err));
+      remoteVideoRef.current.play().catch((err) => {
+        devLog("Remote video play notice:", err);
+        setShowAudioUnlockButton(true);
+      });
     }
 
     // Remote Audio element handles single remote audio playback
@@ -453,6 +465,7 @@ function CallContent() {
       }
       remoteAudioRef.current.play().catch((err) => {
         callWarn("Remote audio autoplay blocked by browser policy:", err);
+        setShowAudioUnlockButton(true);
       });
     }
 
@@ -460,6 +473,21 @@ function CallContent() {
       applyAudioOutputDevice(selectedAudioOutput);
     }
   }, [remoteStream, callData?.status, callData?.type, callType, isSwappedView, selectedAudioOutput, applyAudioOutputDevice]);
+
+  // Audio Playback Unlock Action (for user gesture after browser autoplay rejection)
+  const handleUnlockAudio = async () => {
+    try {
+      if (remoteAudioRef.current) {
+        await remoteAudioRef.current.play();
+      }
+      if (remoteVideoRef.current) {
+        await remoteVideoRef.current.play();
+      }
+      setShowAudioUnlockButton(false);
+    } catch (e) {
+      callError("Error unlocking audio playback:", e);
+    }
+  };
 
   // 9. Format Active Call Duration Timer (MM:SS) & Wake Lock
   useEffect(() => {
@@ -541,6 +569,8 @@ function CallContent() {
     isSettingRemoteAnswerPendingRef.current = false;
     lastAppliedOfferRef.current = null;
     lastAppliedAnswerRef.current = null;
+    isInitialHandshakePendingRef.current = true;
+    setShowAudioUnlockButton(false);
 
     // Reset pre-call preview stream
     if (preCallStreamRef.current) {
@@ -557,15 +587,40 @@ function CallContent() {
 
   // 12. Initialize Local RTCPeerConnection with STUN / TURN Servers & ICE State Watchdog
   const createPeerConnection = async (targetCallType: "audio" | "video") => {
-    const config = await fetchRtcConfig(user ? () => user.getIdToken() : undefined);
-    const pc = new RTCPeerConnection(config);
-    peerConnectionRef.current = pc;
+    let pc: RTCPeerConnection;
+    try {
+      const config = await fetchRtcConfig(user ? () => user.getIdToken() : undefined);
+      pc = new RTCPeerConnection(config);
+      peerConnectionRef.current = pc;
+    } catch (err: any) {
+      setFirstErrorName((prev) => prev || err?.name || "PeerConnectionInitError");
+      callError("Failed to instantiate RTCPeerConnection:", err);
+      // Fallback with default STUN configuration
+      pc = new RTCPeerConnection(DEFAULT_RTC_CONFIG);
+      peerConnectionRef.current = pc;
+    }
 
-    // Initialize adaptive quality controller
-    const controller = new AdaptiveQualityController(pc, (stats) => {
-      setCallStats(stats);
-    });
-    adaptiveControllerRef.current = controller;
+    setSignalingState(pc.signalingState);
+    setIceConnectionState(pc.iceConnectionState);
+    setPeerConnectionState(pc.connectionState);
+
+    pc.onsignalingstatechange = () => {
+      setSignalingState(pc.signalingState);
+    };
+
+    pc.onconnectionstatechange = () => {
+      setPeerConnectionState(pc.connectionState);
+    };
+
+    // Initialize adaptive quality controller safely
+    try {
+      const controller = new AdaptiveQualityController(pc, (stats) => {
+        setCallStats(stats);
+      });
+      adaptiveControllerRef.current = controller;
+    } catch (e) {
+      callWarn("Adaptive controller init note:", e);
+    }
 
     // Handle ICE Candidate Discovery -> Write to Firestore
     pc.onicecandidate = (event) => {
@@ -582,31 +637,27 @@ function CallContent() {
 
     // Handle Remote Stream Tracks
     pc.ontrack = (event) => {
+      setOntrackFired(true);
       devLog("Remote track received:", event.track.kind);
 
-      if (!remoteStreamRef.current) {
-        remoteStreamRef.current = new MediaStream();
-      }
-
-      if (!remoteStreamRef.current.getTracks().some((t) => t.id === event.track.id)) {
-        remoteStreamRef.current.addTrack(event.track);
-      }
-
       if (event.streams && event.streams[0]) {
-        event.streams[0].getTracks().forEach((t) => {
-          if (!remoteStreamRef.current!.getTracks().some((tr) => tr.id === t.id)) {
-            remoteStreamRef.current!.addTrack(t);
-          }
-        });
+        remoteStreamRef.current = event.streams[0];
+        setRemoteStream(event.streams[0]);
+      } else {
+        if (!remoteStreamRef.current) {
+          remoteStreamRef.current = new MediaStream();
+        }
+        if (!remoteStreamRef.current.getTracks().some((t) => t.id === event.track.id)) {
+          remoteStreamRef.current.addTrack(event.track);
+        }
+        setRemoteStream(new MediaStream(remoteStreamRef.current.getTracks()));
       }
-
-      const updatedStream = new MediaStream(remoteStreamRef.current.getTracks());
-      setRemoteStream(updatedStream);
     };
 
     // Connection state & ICE connection state handlers (Self-healing ICE Restart)
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
+      setIceConnectionState(state);
       devLog("ICE Connection State changed:", state);
 
       if (state === "connected" || state === "completed") {
@@ -616,7 +667,24 @@ function CallContent() {
           clearTimeout(iceDisconnectedTimerRef.current);
           iceDisconnectedTimerRef.current = null;
         }
-        controller.start();
+
+        // Apply sender parameters only after connection is established, inside try/catch
+        pc.getSenders().forEach((sender) => {
+          try {
+            if (sender.track?.kind === "audio") {
+              configureAudioSender(sender).catch(() => {});
+            } else if (sender.track?.kind === "video") {
+              configureVideoSender(sender).catch(() => {});
+            }
+          } catch (e) {}
+        });
+
+        // Start adaptive quality monitor inside try/catch
+        try {
+          if (adaptiveControllerRef.current) {
+            adaptiveControllerRef.current.start();
+          }
+        } catch (e) {}
       } else if (state === "disconnected") {
         setReconnectBanner("Reconnecting connection...");
         if (!iceDisconnectedTimerRef.current) {
@@ -656,8 +724,9 @@ function CallContent() {
 
     // Perfect Negotiation: Handle onnegotiationneeded for in-call renegotiation
     pc.onnegotiationneeded = async () => {
-      // Guard against running during initial caller offer generation
-      if (makingOfferRef.current) return;
+      // The callee must never create an offer during the initial handshake!
+      // Only handle renegotiations during an already active call where initial handshake has completed.
+      if (callData?.status !== "active" || isInitialHandshakePendingRef.current || makingOfferRef.current) return;
 
       try {
         devLog("pc.onnegotiationneeded triggered. Current signaling state:", pc.signalingState);
@@ -668,7 +737,7 @@ function CallContent() {
           return;
         }
         const boostedSdp = optimizeOpusSdp(offer.sdp);
-        await pc.setLocalDescription(new RTCSessionDescription({ type: offer.type, sdp: boostedSdp }));
+        await pc.setLocalDescription(new RTCSessionDescription({ type: offer.type, sdp: boostedSdp || offer.sdp }));
 
         if (coupleId && myUid) {
           const callDocRef = doc(db, "couples", coupleId, "call", "current");
@@ -686,7 +755,8 @@ function CallContent() {
           );
           devLog("Renegotiation offer set locally and posted to Firestore.");
         }
-      } catch (err) {
+      } catch (err: any) {
+        setFirstErrorName((prev) => prev || err?.name || "NegotiationError");
         callError("Error in onnegotiationneeded handler:", err);
       } finally {
         makingOfferRef.current = false;
@@ -696,7 +766,7 @@ function CallContent() {
     return pc;
   };
 
-  // 13. Listen to incoming ICE Candidates with Queuing / Buffering & Perfect Negotiation Collision Guard
+  // 13. Listen to incoming ICE Candidates with Queuing / Buffering
   const listenToRemoteIceCandidates = (pc: RTCPeerConnection) => {
     if (!coupleId || !myUid) return;
 
@@ -706,24 +776,24 @@ function CallContent() {
         if (change.type === "added") {
           const data = change.doc.data();
           if (data.fromUserId !== myUid) {
-            // Perfect negotiation: discard candidates associated with an ignored colliding offer
-            if (ignoreOfferRef.current) {
-              devLog("Ignoring candidate while ignoring colliding offer");
-              return;
-            }
-
             const candidateInit: RTCIceCandidateInit = {
               candidate: data.candidate,
               sdpMid: data.sdpMid,
               sdpMLineIndex: data.sdpMLineIndex,
             };
 
+            // Always buffer candidates until the remote description exists, then add them.
             if (!pc.remoteDescription) {
               iceCandidateQueueRef.current.push(candidateInit);
             } else {
-              pc.addIceCandidate(new RTCIceCandidate(candidateInit)).catch((e) =>
-                callError("Error adding remote ICE candidate:", e)
-              );
+              pc.addIceCandidate(new RTCIceCandidate(candidateInit)).catch((e: any) => {
+                // Ignore an addIceCandidate error only while ignoreOffer is true
+                if (ignoreOfferRef.current) {
+                  devLog("addIceCandidate error ignored during colliding offer:", e?.name);
+                  return;
+                }
+                callError("Error adding remote ICE candidate:", e);
+              });
             }
           }
         }
@@ -738,8 +808,13 @@ function CallContent() {
       if (candidateInit) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(candidateInit));
-        } catch (e) {
-          callError("Error flushing queued ICE candidate:", e);
+        } catch (e: any) {
+          // Ignore an addIceCandidate error only while ignoreOffer is true
+          if (ignoreOfferRef.current) {
+            devLog("Queued addIceCandidate error ignored during colliding offer:", e?.name);
+          } else {
+            callError("Error flushing queued ICE candidate:", e);
+          }
         }
       }
     }
@@ -821,16 +896,12 @@ function CallContent() {
       refreshMediaDevices();
 
       makingOfferRef.current = true;
+      isInitialHandshakePendingRef.current = true;
       const pc = await createPeerConnection(typeToUse);
       stream.getTracks().forEach((track) => {
         const sender = pc.addTrack(track, stream);
-        if (track.kind === "audio") {
-          configureAudioSender(sender);
-        } else if (track.kind === "video") {
-          configureVideoSender(sender);
-          if (adaptiveControllerRef.current) {
-            adaptiveControllerRef.current.setVideoSender(sender);
-          }
+        if (track.kind === "video" && adaptiveControllerRef.current) {
+          adaptiveControllerRef.current.setVideoSender(sender);
         }
       });
 
@@ -984,13 +1055,16 @@ function CallContent() {
             });
             await pc.setRemoteDescription(remoteAnswer);
             await flushIceCandidateQueue(pc);
+            isInitialHandshakePendingRef.current = false;
+            ignoreOfferRef.current = false;
             if (ringingTimeoutRef.current) {
               clearTimeout(ringingTimeoutRef.current);
               ringingTimeoutRef.current = null;
             }
             setStatusMessage(null);
             devLog("Remote SDP answer applied successfully.");
-          } catch (e) {
+          } catch (e: any) {
+            setFirstErrorName((prev) => prev || e?.name || "SetRemoteAnswerError");
             callError("Error setting remote answer:", e);
           } finally {
             isSettingRemoteAnswerPendingRef.current = false;
@@ -1030,7 +1104,7 @@ function CallContent() {
 
             const rawAnswer = await pc.createAnswer();
             const boostedSdp = optimizeOpusSdp(rawAnswer.sdp);
-            const answer = new RTCSessionDescription({ type: rawAnswer.type, sdp: boostedSdp });
+            const answer = new RTCSessionDescription({ type: rawAnswer.type, sdp: boostedSdp || rawAnswer.sdp });
             await pc.setLocalDescription(answer);
 
             if (coupleId) {
@@ -1048,8 +1122,11 @@ function CallContent() {
               );
               devLog("Renegotiation answer created, set, and posted to Firestore.");
             }
-          } catch (err) {
+          } catch (err: any) {
+            setFirstErrorName((prev) => prev || err?.name || "HandleOfferError");
             callError("Error handling renegotiation offer:", err);
+          } finally {
+            ignoreOfferRef.current = false;
           }
         }
       }
@@ -1065,6 +1142,7 @@ function CallContent() {
     try {
       setCallType(typeToUse);
       setPermissionError(null);
+      isInitialHandshakePendingRef.current = true;
 
       if (preCallStreamRef.current) {
         preCallStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -1081,13 +1159,8 @@ function CallContent() {
       const pc = await createPeerConnection(typeToUse);
       stream.getTracks().forEach((track) => {
         const sender = pc.addTrack(track, stream);
-        if (track.kind === "audio") {
-          configureAudioSender(sender);
-        } else if (track.kind === "video") {
-          configureVideoSender(sender);
-          if (adaptiveControllerRef.current) {
-            adaptiveControllerRef.current.setVideoSender(sender);
-          }
+        if (track.kind === "video" && adaptiveControllerRef.current) {
+          adaptiveControllerRef.current.setVideoSender(sender);
         }
       });
 
@@ -1104,7 +1177,7 @@ function CallContent() {
 
       const rawAnswer = await pc.createAnswer();
       const boostedSdp = optimizeOpusSdp(rawAnswer.sdp);
-      const answer = new RTCSessionDescription({ type: rawAnswer.type, sdp: boostedSdp });
+      const answer = new RTCSessionDescription({ type: rawAnswer.type, sdp: boostedSdp || rawAnswer.sdp });
       await pc.setLocalDescription(answer);
       lastAppliedAnswerRef.current = answer.sdp;
 
@@ -1122,9 +1195,11 @@ function CallContent() {
         { merge: true }
       );
 
+      isInitialHandshakePendingRef.current = false;
       setStatusMessage(null);
       setShowPermissionModal(false);
     } catch (err: any) {
+      setFirstErrorName((prev) => prev || err?.name || "AcceptCallError");
       callError("Error accepting call / getUserMedia failed:", err);
       setPermissionError("Camera/mic access is needed for calls — please enable it in browser settings.");
 
@@ -1218,6 +1293,19 @@ function CallContent() {
     <div className="max-w-4xl mx-auto flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] relative overflow-hidden rounded-3xl border border-rose-500/40 bg-[#16060E]/95 shadow-2xl">
       {/* Dedicated Single Audio element for remote sound playback with no echo */}
       <audio ref={remoteAudioRef} autoPlay playsInline />
+
+      {/* Audio playback unlock prompt (displayed when browser autoplay policy blocks audio/video play) */}
+      {showAudioUnlockButton && isInCall && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50">
+          <button
+            onClick={handleUnlockAudio}
+            className="px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-2xl flex items-center gap-2 border border-white/30 animate-bounce"
+          >
+            <Volume2 className="w-4 h-4 text-white" />
+            <span>Tap to enable sound</span>
+          </button>
+        </div>
+      )}
 
       {/* Permission Pre-Prompt Modal */}
       <MediaPermissionModal
@@ -1335,6 +1423,18 @@ function CallContent() {
         <CallDebugOverlay
           stats={callStats}
           reconnectStatus={reconnectBanner}
+          signalingState={signalingState}
+          iceConnectionState={iceConnectionState}
+          connectionState={peerConnectionState}
+          localTrackCount={localStream?.getTracks().length || 0}
+          remoteTrackCount={remoteStream?.getTracks().length || 0}
+          ontrackFired={ontrackFired}
+          turnStatus={getLastTurnHttpStatus() !== null ? String(getLastTurnHttpStatus()) : "unfetched"}
+          remoteVideoHasSrc={Boolean(remoteVideoRef.current?.srcObject)}
+          remoteVideoPlaying={Boolean(remoteVideoRef.current && !remoteVideoRef.current.paused)}
+          remoteAudioHasSrc={Boolean(remoteAudioRef.current?.srcObject)}
+          remoteAudioPlaying={Boolean(remoteAudioRef.current && !remoteAudioRef.current.paused)}
+          firstErrorName={firstErrorName}
           onClose={() => setShowDebugOverlay(false)}
         />
       )}
@@ -1456,11 +1556,6 @@ function CallContent() {
             muted={true}
             className={`w-full h-full object-cover ${isSwappedView ? localMirrorClass : ""}`}
           />
-
-          {/* Hidden reference video tag to maintain stream binding when swapped */}
-          <div className="hidden">
-            <video ref={isSwappedView ? remoteVideoRef : localVideoRef} autoPlay playsInline muted={true} />
-          </div>
 
           {/* Connecting Spinner Overlay */}
           {!remoteStream && (

@@ -124,13 +124,11 @@ service cloud.firestore {
                               && request.resource.data.callerId == request.auth.uid
                               && (resource == null || resource.data.status in ['idle', 'ended', 'rejected', 'missed']);
 
-        // Accept ('active') or Decline ('rejected') or in-call renegotiation ('active'):
+        // Accept ('active') or Decline ('rejected'): callee must be auth user
         allow update: if isAuthenticated() 
                       && isPartnerInCouple(getCoupleData(coupleId)) 
-                      && (
-                        (resource.data.calleeId == request.auth.uid && request.resource.data.status in ['active', 'rejected'])
-                        || (resource.data.status == 'active' && request.resource.data.status == 'active')
-                      );
+                      && resource.data.calleeId == request.auth.uid
+                      && request.resource.data.status in ['active', 'rejected'];
 
         // End ('ended'), Missed ('missed'), or Reset ('idle'): caller or callee
         allow update: if isAuthenticated() 
