@@ -63,6 +63,9 @@ interface CallData {
   type: "audio" | "video";
   offer?: { type: RTCSdpType; sdp: string };
   answer?: { type: RTCSdpType; sdp: string };
+  renegotiationAt?: any;
+  renegotiationBy?: string;
+  renegotiationAnswerAt?: any;
   startedAt?: any;
   answeredAt?: any;
   endedAt?: any;
@@ -121,6 +124,13 @@ function CallContent() {
   const makingOfferRef = useRef<boolean>(false);
   const ignoreOfferRef = useRef<boolean>(false);
   const isSettingRemoteAnswerPendingRef = useRef<boolean>(false);
+  const lastAppliedOfferRef = useRef<string | null>(null);
+  const lastAppliedAnswerRef = useRef<string | null>(null);
+
+  // Pre-Call Live Camera Preview State & Refs
+  const [preCallPreviewActive, setPreCallPreviewActive] = useState<boolean>(false);
+  const preCallStreamRef = useRef<MediaStream | null>(null);
+  const preCallVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -132,6 +142,9 @@ function CallContent() {
   const coupleId = couple?.id;
   const myUid = user?.uid;
   const partnerUid = couple?.userIds?.find((id) => id !== myUid);
+
+  // Deterministic polite assignment: exactly one peer is polite without extra round-trips
+  const polite = Boolean(myUid && partnerUid && myUid > partnerUid);
 
   const myName = userProfile?.displayName || "You";
   const partnerName = partnerProfile?.displayName || "Partner";
@@ -284,8 +297,34 @@ function CallContent() {
 
   // 5. Flip Camera (Front <-> Rear Facing Mode)
   const flipCamera = async () => {
-    if (!localStreamRef.current) return;
     const targetFacing = facingMode === "user" ? "environment" : "user";
+
+    // Handle camera flip during pre-call camera preview
+    if (preCallPreviewActive && preCallStreamRef.current && !localStreamRef.current) {
+      try {
+        preCallStreamRef.current.getTracks().forEach((t) => t.stop());
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30, max: 30 },
+            facingMode: { ideal: targetFacing },
+          },
+        });
+        preCallStreamRef.current = newStream;
+        if (preCallVideoRef.current) {
+          preCallVideoRef.current.srcObject = newStream;
+          preCallVideoRef.current.play().catch(() => {});
+        }
+        setFacingMode(targetFacing);
+        devLog("Pre-call camera flipped to facingMode:", targetFacing);
+      } catch (err) {
+        callError("Error flipping pre-call preview camera:", err);
+      }
+      return;
+    }
+
+    if (!localStreamRef.current) return;
 
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
@@ -322,6 +361,33 @@ function CallContent() {
       callError("Error flipping camera:", err);
     }
   };
+
+  // Pre-Call Live Camera Preview Toggle
+  const togglePreCallPreview = async () => {
+    if (preCallPreviewActive) {
+      if (preCallStreamRef.current) {
+        preCallStreamRef.current.getTracks().forEach((t) => t.stop());
+        preCallStreamRef.current = null;
+      }
+      setPreCallPreviewActive(false);
+    } else {
+      try {
+        const stream = await acquireLocalMediaStream("video");
+        preCallStreamRef.current = stream;
+        setPreCallPreviewActive(true);
+      } catch (e) {
+        callError("Error starting pre-call camera preview:", e);
+      }
+    }
+  };
+
+  // Bind pre-call video element
+  useEffect(() => {
+    if (preCallPreviewActive && preCallVideoRef.current && preCallStreamRef.current) {
+      preCallVideoRef.current.srcObject = preCallStreamRef.current;
+      preCallVideoRef.current.play().catch((e) => devLog("Pre-call preview play note:", e));
+    }
+  }, [preCallPreviewActive, facingMode]);
 
   // 6. Subscribe to Firestore Call Signaling Document
   useEffect(() => {
@@ -468,6 +534,20 @@ function CallContent() {
     setRemoteStream(null);
     iceCandidateQueueRef.current = [];
     setCallStats(null);
+
+    // Reset perfect negotiation tracking refs
+    makingOfferRef.current = false;
+    ignoreOfferRef.current = false;
+    isSettingRemoteAnswerPendingRef.current = false;
+    lastAppliedOfferRef.current = null;
+    lastAppliedAnswerRef.current = null;
+
+    // Reset pre-call preview stream
+    if (preCallStreamRef.current) {
+      preCallStreamRef.current.getTracks().forEach((t) => t.stop());
+      preCallStreamRef.current = null;
+    }
+    setPreCallPreviewActive(false);
   }, []);
 
   // Ensure cleanup on component unmount
@@ -574,10 +654,49 @@ function CallContent() {
       }
     };
 
+    // Perfect Negotiation: Handle onnegotiationneeded for in-call renegotiation
+    pc.onnegotiationneeded = async () => {
+      // Guard against running during initial caller offer generation
+      if (makingOfferRef.current) return;
+
+      try {
+        devLog("pc.onnegotiationneeded triggered. Current signaling state:", pc.signalingState);
+        makingOfferRef.current = true;
+        const offer = await pc.createOffer();
+        if (pc.signalingState !== "stable") {
+          devLog("Signaling state changed while creating offer; skipping setLocalDescription");
+          return;
+        }
+        const boostedSdp = optimizeOpusSdp(offer.sdp);
+        await pc.setLocalDescription(new RTCSessionDescription({ type: offer.type, sdp: boostedSdp }));
+
+        if (coupleId && myUid) {
+          const callDocRef = doc(db, "couples", coupleId, "call", "current");
+          await setDoc(
+            callDocRef,
+            {
+              offer: {
+                type: pc.localDescription!.type,
+                sdp: pc.localDescription!.sdp,
+              },
+              renegotiationAt: Date.now(),
+              renegotiationBy: myUid,
+            },
+            { merge: true }
+          );
+          devLog("Renegotiation offer set locally and posted to Firestore.");
+        }
+      } catch (err) {
+        callError("Error in onnegotiationneeded handler:", err);
+      } finally {
+        makingOfferRef.current = false;
+      }
+    };
+
     return pc;
   };
 
-  // 13. Listen to incoming ICE Candidates with Queuing / Buffering
+  // 13. Listen to incoming ICE Candidates with Queuing / Buffering & Perfect Negotiation Collision Guard
   const listenToRemoteIceCandidates = (pc: RTCPeerConnection) => {
     if (!coupleId || !myUid) return;
 
@@ -587,6 +706,12 @@ function CallContent() {
         if (change.type === "added") {
           const data = change.doc.data();
           if (data.fromUserId !== myUid) {
+            // Perfect negotiation: discard candidates associated with an ignored colliding offer
+            if (ignoreOfferRef.current) {
+              devLog("Ignoring candidate while ignoring colliding offer");
+              return;
+            }
+
             const candidateInit: RTCIceCandidateInit = {
               candidate: data.candidate,
               sdpMid: data.sdpMid,
@@ -683,12 +808,19 @@ function CallContent() {
         setCallerTuneTrack(null);
       }
 
+      if (preCallStreamRef.current) {
+        preCallStreamRef.current.getTracks().forEach((t) => t.stop());
+        preCallStreamRef.current = null;
+      }
+      setPreCallPreviewActive(false);
+
       const stream = await acquireLocalMediaStream(typeToUse);
       localStreamRef.current = stream;
       setLocalStream(stream);
 
       refreshMediaDevices();
 
+      makingOfferRef.current = true;
       const pc = await createPeerConnection(typeToUse);
       stream.getTracks().forEach((track) => {
         const sender = pc.addTrack(track, stream);
@@ -708,6 +840,8 @@ function CallContent() {
       const boostedSdp = optimizeOpusSdp(rawOffer.sdp);
       const offer = new RTCSessionDescription({ type: rawOffer.type, sdp: boostedSdp });
       await pc.setLocalDescription(offer);
+      lastAppliedOfferRef.current = offer.sdp;
+      makingOfferRef.current = false;
 
       const callDocRef = doc(db, "couples", coupleId, "call", "current");
       await setDoc(callDocRef, {
@@ -832,31 +966,97 @@ function CallContent() {
     };
   }, [isCallerRinging, callerTuneTrack]);
 
-  // Handle Caller Remote Answer Listener
+  // Perfect Negotiation: Handle Incoming Offers & Answers during active call
   useEffect(() => {
-    if (callData?.status === "active" && callData.answer && peerConnectionRef.current) {
-      const pc = peerConnectionRef.current;
+    if (!peerConnectionRef.current || callData?.status !== "active") return;
+    const pc = peerConnectionRef.current;
 
-      if (!pc.currentRemoteDescription) {
-        const remoteAnswer = new RTCSessionDescription({
-          type: callData.answer.type,
-          sdp: callData.answer.sdp,
-        });
-
-        pc.setRemoteDescription(remoteAnswer)
-          .then(() => {
-            devLog("Caller set remote SDP answer successfully.");
-            flushIceCandidateQueue(pc);
+    const handleSignaling = async () => {
+      // 1. Handle Remote Answer (initial answer or renegotiated answer)
+      if (callData.answer && callData.answer.sdp !== lastAppliedAnswerRef.current) {
+        if (pc.signalingState === "have-local-offer") {
+          lastAppliedAnswerRef.current = callData.answer.sdp;
+          isSettingRemoteAnswerPendingRef.current = true;
+          try {
+            const remoteAnswer = new RTCSessionDescription({
+              type: callData.answer.type,
+              sdp: callData.answer.sdp,
+            });
+            await pc.setRemoteDescription(remoteAnswer);
+            await flushIceCandidateQueue(pc);
             if (ringingTimeoutRef.current) {
               clearTimeout(ringingTimeoutRef.current);
               ringingTimeoutRef.current = null;
             }
             setStatusMessage(null);
-          })
-          .catch((e) => callError("Error setting remote answer on caller:", e));
+            devLog("Remote SDP answer applied successfully.");
+          } catch (e) {
+            callError("Error setting remote answer:", e);
+          } finally {
+            isSettingRemoteAnswerPendingRef.current = false;
+          }
+        }
       }
-    }
-  }, [callData]);
+
+      // 2. Handle Remote Offer (renegotiation offer from partner)
+      if (callData.offer && callData.offer.sdp !== lastAppliedOfferRef.current) {
+        const isPartnerOffer =
+          callData.renegotiationBy === partnerUid ||
+          Boolean(callData.renegotiationAt) ||
+          (callData.callerId && callData.callerId !== myUid);
+
+        if (isPartnerOffer) {
+          const offerDesc = new RTCSessionDescription({
+            type: callData.offer.type,
+            sdp: callData.offer.sdp,
+          });
+
+          const readyForOffer =
+            !makingOfferRef.current &&
+            (pc.signalingState === "stable" || isSettingRemoteAnswerPendingRef.current);
+          const offerCollision = !readyForOffer;
+
+          ignoreOfferRef.current = !polite && offerCollision;
+          if (ignoreOfferRef.current) {
+            callWarn("Offer collision: impolite peer is ignoring partner colliding offer");
+            return;
+          }
+
+          lastAppliedOfferRef.current = callData.offer.sdp;
+          try {
+            // Polite peer automatically rolls back local offer if in have-local-offer
+            await pc.setRemoteDescription(offerDesc);
+            await flushIceCandidateQueue(pc);
+
+            const rawAnswer = await pc.createAnswer();
+            const boostedSdp = optimizeOpusSdp(rawAnswer.sdp);
+            const answer = new RTCSessionDescription({ type: rawAnswer.type, sdp: boostedSdp });
+            await pc.setLocalDescription(answer);
+
+            if (coupleId) {
+              const callDocRef = doc(db, "couples", coupleId, "call", "current");
+              await setDoc(
+                callDocRef,
+                {
+                  answer: {
+                    type: answer.type,
+                    sdp: answer.sdp,
+                  },
+                  renegotiationAnswerAt: Date.now(),
+                },
+                { merge: true }
+              );
+              devLog("Renegotiation answer created, set, and posted to Firestore.");
+            }
+          } catch (err) {
+            callError("Error handling renegotiation offer:", err);
+          }
+        }
+      }
+    };
+
+    handleSignaling();
+  }, [callData, coupleId, myUid, partnerUid, polite]);
 
   // 15. CALLEE FLOW: Execute Accept Call
   const executeAcceptCall = async (typeToUse: "audio" | "video") => {
@@ -865,6 +1065,12 @@ function CallContent() {
     try {
       setCallType(typeToUse);
       setPermissionError(null);
+
+      if (preCallStreamRef.current) {
+        preCallStreamRef.current.getTracks().forEach((t) => t.stop());
+        preCallStreamRef.current = null;
+      }
+      setPreCallPreviewActive(false);
 
       const stream = await acquireLocalMediaStream(typeToUse);
       localStreamRef.current = stream;
@@ -892,6 +1098,7 @@ function CallContent() {
         sdp: callData.offer.sdp,
       });
 
+      lastAppliedOfferRef.current = callData.offer.sdp;
       await pc.setRemoteDescription(remoteOffer);
       await flushIceCandidateQueue(pc);
 
@@ -899,6 +1106,7 @@ function CallContent() {
       const boostedSdp = optimizeOpusSdp(rawAnswer.sdp);
       const answer = new RTCSessionDescription({ type: rawAnswer.type, sdp: boostedSdp });
       await pc.setLocalDescription(answer);
+      lastAppliedAnswerRef.current = answer.sdp;
 
       const callDocRef = doc(db, "couples", coupleId, "call", "current");
       await setDoc(
@@ -1122,8 +1330,8 @@ function CallContent() {
         </div>
       )}
 
-      {/* Diagnostics / Stats Debug Overlay */}
-      {showDebugOverlay && (
+      {/* Diagnostics / Stats Debug Overlay — strictly only rendered when NEXT_PUBLIC_CALL_DEBUG=1 or in dev */}
+      {CALL_DEBUG_ENABLED && showDebugOverlay && (
         <CallDebugOverlay
           stats={callStats}
           reconnectStatus={reconnectBanner}
@@ -1134,22 +1342,54 @@ function CallContent() {
       {!isInCall ? (
         /* IDLE / PRE-CALL LAUNCHER VIEW */
         <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-6">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-rose-600 to-wine-600 flex items-center justify-center text-white shadow-glow relative">
-            {partnerProfile?.photoUrl ? (
-              <img
-                src={partnerProfile.photoUrl}
-                alt={partnerName}
-                className="w-full h-full object-cover rounded-full"
+          {preCallPreviewActive ? (
+            <div className="relative w-48 h-64 sm:w-56 sm:h-72 rounded-3xl overflow-hidden border-2 border-rose-500/60 shadow-2xl bg-black animate-fade-in">
+              <video
+                ref={preCallVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full h-full object-cover ${isSelfMirrored ? "-scale-x-100" : ""}`}
               />
-            ) : (
-              <span className="text-3xl font-extrabold">{partnerName.slice(0, 2).toUpperCase()}</span>
-            )}
-            <span
-              className={`absolute bottom-0 right-0 w-5 h-5 rounded-full border-2 border-[#16060E] ${
-                partnerOnline ? "bg-emerald-400" : "bg-gray-500"
-              }`}
-            />
-          </div>
+              {/* Controls on pre-call preview */}
+              <div className="absolute top-2 right-2 flex items-center gap-1.5 z-10">
+                <button
+                  onClick={flipCamera}
+                  className="p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md transition-colors"
+                  title={`Switch camera (currently: ${facingMode === "user" ? "Front" : "Rear"})`}
+                >
+                  <SwitchCamera className="w-4 h-4 text-rose-300" />
+                </button>
+                <button
+                  onClick={togglePreCallPreview}
+                  className="p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md transition-colors"
+                  title="Close camera preview"
+                >
+                  <X className="w-4 h-4 text-rose-300" />
+                </button>
+              </div>
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md text-[10px] text-white font-bold whitespace-nowrap">
+                <span>{facingMode === "user" ? "Front Camera (Mirrored)" : "Rear Camera (Normal)"}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-rose-600 to-wine-600 flex items-center justify-center text-white shadow-glow relative">
+              {partnerProfile?.photoUrl ? (
+                <img
+                  src={partnerProfile.photoUrl}
+                  alt={partnerName}
+                  className="w-full h-full object-cover rounded-full"
+                />
+              ) : (
+                <span className="text-3xl font-extrabold">{partnerName.slice(0, 2).toUpperCase()}</span>
+              )}
+              <span
+                className={`absolute bottom-0 right-0 w-5 h-5 rounded-full border-2 border-[#16060E] ${
+                  partnerOnline ? "bg-emerald-400" : "bg-gray-500"
+                }`}
+              />
+            </div>
+          )}
 
           <div className="space-y-1">
             <h2 className="text-2xl font-extrabold text-white flex items-center justify-center gap-2">
@@ -1162,6 +1402,15 @@ function CallContent() {
             <p className="text-xs text-rose-300/70">
               {partnerOnline ? "Partner is online and ready for call" : "Partner is currently offline"}
             </p>
+            {!preCallPreviewActive && (
+              <button
+                onClick={togglePreCallPreview}
+                className="pt-2 text-xs text-rose-300/80 hover:text-rose-200 underline font-semibold inline-flex items-center gap-1.5 transition-colors"
+              >
+                <Video className="w-3.5 h-3.5 text-rose-400" />
+                <span>Test Camera Preview</span>
+              </button>
+            )}
           </div>
 
           {statusMessage && (
@@ -1262,7 +1511,12 @@ function CallContent() {
             {/* Quality Indicator Badge (Good / Fair / Poor) */}
             {callStats && (
               <button
-                onClick={() => setShowDebugOverlay(!showDebugOverlay)}
+                onClick={() => {
+                  if (CALL_DEBUG_ENABLED) {
+                    setShowDebugOverlay(!showDebugOverlay);
+                  }
+                }}
+                disabled={!CALL_DEBUG_ENABLED}
                 className={`text-[11px] px-2.5 py-1 rounded-full font-bold border backdrop-blur-md flex items-center gap-1.5 transition-colors ${
                   callStats.quality === "good"
                     ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
@@ -1270,7 +1524,7 @@ function CallContent() {
                     ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                     : "bg-rose-500/20 text-rose-300 border-rose-500/40"
                 }`}
-                title="Click to toggle diagnostics overlay"
+                title={CALL_DEBUG_ENABLED ? "Click to toggle diagnostics overlay" : "Connection quality"}
               >
                 <Activity className="w-3 h-3" />
                 <span className="capitalize">{callStats.quality}</span>
@@ -1364,7 +1618,12 @@ function CallContent() {
               </p>
               {callStats && (
                 <button
-                  onClick={() => setShowDebugOverlay(!showDebugOverlay)}
+                  onClick={() => {
+                    if (CALL_DEBUG_ENABLED) {
+                      setShowDebugOverlay(!showDebugOverlay);
+                    }
+                  }}
+                  disabled={!CALL_DEBUG_ENABLED}
                   className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border mt-2 ${
                     callStats.quality === "good"
                       ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
@@ -1372,6 +1631,7 @@ function CallContent() {
                       ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                       : "bg-rose-500/20 text-rose-300 border-rose-500/40"
                   }`}
+                  title={CALL_DEBUG_ENABLED ? "Click to toggle diagnostics overlay" : "Connection quality"}
                 >
                   <Activity className="w-3.5 h-3.5" />
                   <span className="capitalize">{callStats.quality} Quality</span>
