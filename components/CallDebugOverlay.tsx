@@ -22,6 +22,13 @@ interface CallDebugOverlayProps {
   onClose?: () => void;
 }
 
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function CallDebugOverlay({
   stats,
   reconnectStatus,
@@ -43,7 +50,7 @@ export default function CallDebugOverlay({
     stats?.quality === "good" ? "text-emerald-400" : stats?.quality === "fair" ? "text-amber-400" : "text-rose-400";
 
   return (
-    <div className="absolute bottom-24 right-4 z-40 max-w-sm w-72 p-3.5 rounded-2xl bg-black/90 backdrop-blur-md border border-rose-500/40 text-white text-[11px] font-mono shadow-2xl space-y-2 select-none max-h-[70vh] overflow-y-auto">
+    <div className="absolute bottom-24 right-4 z-40 max-w-sm w-76 p-3.5 rounded-2xl bg-black/95 backdrop-blur-md border border-rose-500/40 text-white text-[11px] font-mono shadow-2xl space-y-2 select-none max-h-[75vh] overflow-y-auto">
       <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
         <div className="flex items-center gap-1.5 font-bold">
           <Activity className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
@@ -98,6 +105,22 @@ export default function CallDebugOverlay({
 
         {stats && (
           <>
+            <span className="text-white/60">Ladder Level:</span>
+            <span className="font-bold text-rose-300 truncate" title={stats.levelLabel}>
+              {stats.levelLabel}
+            </span>
+
+            <span className="text-white/60">Candidate:</span>
+            <span className="capitalize font-semibold text-rose-300">{stats.candidateType}</span>
+
+            <span className="text-white/60">Avail Bitrate:</span>
+            <span className="font-semibold text-emerald-300">
+              {stats.availableOutgoingBitrateKbps > 0 ? `${stats.availableOutgoingBitrateKbps} kbps` : "N/A"}
+            </span>
+
+            <span className="text-white/60">Sent Bitrate:</span>
+            <span>{stats.bitrateKbps} kbps</span>
+
             <span className="text-white/60">Quality:</span>
             <span className={`font-bold capitalize ${qualityColor}`}>{stats.quality}</span>
 
@@ -106,19 +129,18 @@ export default function CallDebugOverlay({
               {stats.resolution.width > 0 ? `${stats.resolution.width}x${stats.resolution.height}` : "Audio/N/A"}
             </span>
 
-            <span className="text-white/60">Bitrate:</span>
-            <span>{stats.bitrateKbps} kbps</span>
+            <span className="text-white/60">FPS / RTT / Jitter:</span>
+            <span>{stats.fps} fps / {stats.rttMs} ms / {stats.jitterMs} ms</span>
 
-            <span className="text-white/60">Packet Loss:</span>
+            <span className="text-white/60">Packets Lost:</span>
             <span className={stats.packetLossPercent > 8 ? "text-rose-400 font-bold" : "text-white"}>
-              {stats.packetLossPercent}%
+              {stats.packetLossPercent}% ({stats.packetsLostTotal})
             </span>
 
-            <span className="text-white/60">RTT:</span>
-            <span className={stats.rttMs > 400 ? "text-amber-400 font-bold" : "text-white"}>{stats.rttMs} ms</span>
-
-            <span className="text-white/60">Candidate:</span>
-            <span className="capitalize font-semibold text-rose-300">{stats.candidateType}</span>
+            <span className="text-white/60">Bytes Recv (A/V):</span>
+            <span className="truncate">
+              {formatBytes(stats.audioBytesReceived)} / {formatBytes(stats.videoBytesReceived)}
+            </span>
           </>
         )}
       </div>

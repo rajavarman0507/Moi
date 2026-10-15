@@ -28,6 +28,7 @@ import {
   applyTrackContentHints,
   configureAudioSender,
   configureVideoSender,
+  preferVp8VideoCodec,
   optimizeOpusSdp,
 } from "@/lib/call/mediaConstraints";
 import { AdaptiveQualityController, CallStatsSnapshot } from "@/lib/call/adaptiveQuality";
@@ -314,9 +315,9 @@ function CallContent() {
         preCallStreamRef.current.getTracks().forEach((t) => t.stop());
         const newStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30, max: 30 },
+            width: { ideal: 640 },
+            height: { ideal: 360 },
+            frameRate: { ideal: 20, max: 24 },
             facingMode: { ideal: targetFacing },
           },
         });
@@ -338,9 +339,9 @@ function CallContent() {
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30, max: 30 },
+          width: { ideal: 640 },
+          height: { ideal: 360 },
+          frameRate: { ideal: 20, max: 24 },
           facingMode: { ideal: targetFacing },
         },
       });
@@ -356,6 +357,10 @@ function CallContent() {
           await sender.replaceTrack(newTrack);
           await configureVideoSender(sender);
         }
+      }
+
+      if (adaptiveControllerRef.current) {
+        adaptiveControllerRef.current.setLocalVideoTrack(newTrack, isCameraOff);
       }
 
       const oldTrack = localStreamRef.current.getVideoTracks()[0];
@@ -614,13 +619,37 @@ function CallContent() {
 
     // Initialize adaptive quality controller safely
     try {
-      const controller = new AdaptiveQualityController(pc, (stats) => {
-        setCallStats(stats);
-      });
+      const controller = new AdaptiveQualityController(
+        pc,
+        (stats) => {
+          setCallStats(stats);
+        },
+        () => {
+          // If remote tracks exist but no packets are arriving for 5 seconds, show "Connection problem" and trigger an ICE restart
+          callWarn("No inbound packets arriving for 5s — triggering recovery ICE restart...");
+          setReconnectBanner("Connection problem");
+          if (iceRestartAttemptsRef.current < 3) {
+            iceRestartAttemptsRef.current++;
+            try {
+              if ("restartIce" in pc) {
+                pc.restartIce();
+              }
+            } catch (e) {
+              callError("Error triggering restartIce on stalled media:", e);
+            }
+          }
+        },
+        () => {
+          setReconnectBanner((prev) => (prev === "Connection problem" ? null : prev));
+        }
+      );
       adaptiveControllerRef.current = controller;
     } catch (e) {
       callWarn("Adaptive controller init note:", e);
     }
+
+    // Prefer VP8 video codec where supported
+    preferVp8VideoCodec(pc);
 
     // Handle ICE Candidate Discovery -> Write to Firestore
     pc.onicecandidate = (event) => {
@@ -640,9 +669,9 @@ function CallContent() {
       setOntrackFired(true);
       devLog("Remote track received:", event.track.kind);
 
+      let targetStream: MediaStream;
       if (event.streams && event.streams[0]) {
-        remoteStreamRef.current = event.streams[0];
-        setRemoteStream(event.streams[0]);
+        targetStream = event.streams[0];
       } else {
         if (!remoteStreamRef.current) {
           remoteStreamRef.current = new MediaStream();
@@ -650,7 +679,20 @@ function CallContent() {
         if (!remoteStreamRef.current.getTracks().some((t) => t.id === event.track.id)) {
           remoteStreamRef.current.addTrack(event.track);
         }
-        setRemoteStream(new MediaStream(remoteStreamRef.current.getTracks()));
+        targetStream = new MediaStream(remoteStreamRef.current.getTracks());
+      }
+      remoteStreamRef.current = targetStream;
+      setRemoteStream(targetStream);
+
+      // Once ontrack fires, attach stream to remote <video> (muted) and single remote <audio>, call play() on both
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = targetStream;
+        remoteVideoRef.current.muted = true;
+        remoteVideoRef.current.play().catch(() => setShowAudioUnlockButton(true));
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = targetStream;
+        remoteAudioRef.current.play().catch(() => setShowAudioUnlockButton(true));
       }
     };
 
@@ -686,26 +728,39 @@ function CallContent() {
           }
         } catch (e) {}
       } else if (state === "disconnected") {
-        setReconnectBanner("Reconnecting connection...");
+        setReconnectBanner("Reconnecting...");
         if (!iceDisconnectedTimerRef.current) {
           iceDisconnectedTimerRef.current = setTimeout(async () => {
             if (pc.iceConnectionState === "disconnected") {
-              callWarn("ICE disconnected for >3s — triggering ICE restart...");
-              try {
-                if ("restartIce" in pc) {
-                  pc.restartIce();
+              if (iceRestartAttemptsRef.current < 3) {
+                iceRestartAttemptsRef.current++;
+                setReconnectBanner(`Reconnecting... (attempt ${iceRestartAttemptsRef.current} of 3)`);
+                callWarn(`ICE disconnected for >3s — triggering ICE restart (attempt ${iceRestartAttemptsRef.current})...`);
+                try {
+                  if ("restartIce" in pc) {
+                    pc.restartIce();
+                  }
+                } catch (e) {
+                  callError("Error triggering restartIce on disconnected:", e);
                 }
-              } catch (e) {
-                callError("Error triggering restartIce:", e);
+                if (iceDisconnectedTimerRef.current) {
+                  clearTimeout(iceDisconnectedTimerRef.current);
+                  iceDisconnectedTimerRef.current = null;
+                }
+              } else {
+                setReconnectBanner("Connection lost. Ending call...");
+                setTimeout(() => {
+                  handleHangUp();
+                }, 2000);
               }
             }
           }, 3000);
         }
       } else if (state === "failed") {
-        if (iceRestartAttemptsRef.current === 0) {
+        if (iceRestartAttemptsRef.current < 3) {
           iceRestartAttemptsRef.current++;
-          setReconnectBanner("Reconnecting audio/video...");
-          callWarn("ICE failed — attempting single recovery ICE restart...");
+          setReconnectBanner(`Reconnecting... (attempt ${iceRestartAttemptsRef.current} of 3)`);
+          callWarn(`ICE failed — attempting recovery ICE restart (attempt ${iceRestartAttemptsRef.current})...`);
           try {
             if ("restartIce" in pc) {
               pc.restartIce();
@@ -820,7 +875,7 @@ function CallContent() {
     }
   };
 
-  // Acquire Media Stream helper with 720p HD Video resolution & OverconstrainedError fallback to 480p
+  // Acquire Media Stream helper starting at 640x360 ideal (20-24fps), fallback to 320x240 (never 720p)
   const acquireLocalMediaStream = async (typeToUse: "audio" | "video"): Promise<MediaStream> => {
     const audioConstraint = selectedAudioInput
       ? { ...IDEAL_AUDIO_CONSTRAINTS, deviceId: { exact: selectedAudioInput } }
@@ -832,16 +887,16 @@ function CallContent() {
       return stream;
     }
 
-    const videoConstraint720p: MediaTrackConstraints = selectedVideoInput
+    const videoConstraint360p: MediaTrackConstraints = selectedVideoInput
       ? { ...IDEAL_VIDEO_CONSTRAINTS_USER, deviceId: { exact: selectedVideoInput }, facingMode: undefined }
       : { ...IDEAL_VIDEO_CONSTRAINTS_USER, facingMode: facingMode };
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint, video: videoConstraint720p });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint, video: videoConstraint360p });
       applyTrackContentHints(stream);
       return stream;
     } catch (err) {
-      callWarn("720p ideal constraint failed/overconstrained, falling back to 640x480:", err);
+      callWarn("360p ideal constraint failed/overconstrained, falling back to 320x240:", err);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint, video: FALLBACK_VIDEO_CONSTRAINTS });
       applyTrackContentHints(stream);
       return stream;
@@ -902,8 +957,10 @@ function CallContent() {
         const sender = pc.addTrack(track, stream);
         if (track.kind === "video" && adaptiveControllerRef.current) {
           adaptiveControllerRef.current.setVideoSender(sender);
+          adaptiveControllerRef.current.setLocalVideoTrack(track, isCameraOff);
         }
       });
+      preferVp8VideoCodec(pc);
 
       listenToRemoteIceCandidates(pc);
 
@@ -1161,8 +1218,10 @@ function CallContent() {
         const sender = pc.addTrack(track, stream);
         if (track.kind === "video" && adaptiveControllerRef.current) {
           adaptiveControllerRef.current.setVideoSender(sender);
+          adaptiveControllerRef.current.setLocalVideoTrack(track, isCameraOff);
         }
       });
+      preferVp8VideoCodec(pc);
 
       listenToRemoteIceCandidates(pc);
 
@@ -1259,8 +1318,12 @@ function CallContent() {
     if (localStreamRef.current) {
       const videoTrack = localStreamRef.current.getVideoTracks()[0];
       if (videoTrack) {
-        videoTrack.enabled = isCameraOff;
-        setIsCameraOff(!isCameraOff);
+        const nextOff = !isCameraOff;
+        videoTrack.enabled = !nextOff;
+        setIsCameraOff(nextOff);
+        if (adaptiveControllerRef.current) {
+          adaptiveControllerRef.current.setUserCameraOff(nextOff);
+        }
       }
     }
   };
@@ -1573,6 +1636,14 @@ function CallContent() {
             </div>
           )}
 
+          {/* Weak connection: audio only banner */}
+          {callStats?.isVideoPausedForWeakConnection && !reconnectBanner && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-2xl bg-amber-600/95 text-white font-bold text-xs shadow-lg flex items-center gap-2 animate-pulse border border-white/20">
+              <AlertCircle className="w-4 h-4 text-amber-200" />
+              <span>Weak connection: audio only</span>
+            </div>
+          )}
+
           {/* Floating PIP Corner Preview Video (Tap to Swap View) */}
           <div
             onClick={() => setIsSwappedView(!isSwappedView)}
@@ -1737,6 +1808,12 @@ function CallContent() {
                   <Headphones className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Bluetooth Audio Active</span>
                 </span>
+              )}
+              {callStats?.isVideoPausedForWeakConnection && (
+                <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Weak connection: audio only</span>
+                </div>
               )}
             </div>
           </div>
